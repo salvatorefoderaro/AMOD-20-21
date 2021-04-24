@@ -165,10 +165,12 @@ def euristic(T, B, Delta):
     second_doses_values = []
     object_function_value = 0
 
-    # y_i = min (b_i, b_{i+Delta}}
+    #       { 0, i < Delta
+    # y_i = 
+    #       { min (b_{i-Delta}, b_i), i >= Delta
 
-    for i in range(0, len(B)-Delta):
-        second_doses_values.append(min(B[i], B[i+Delta]))
+    for i in range(Delta, len(B)):
+        second_doses_values.append(min(B[i-Delta], B[i]))
 
     for j in range(0, len(second_doses_values)):
         object_function_value += second_doses_values[j] * (j+ Delta + 1)
