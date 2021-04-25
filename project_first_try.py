@@ -15,11 +15,11 @@ def optimize_test_basic(T, B, Delta):
     second_doses = m.addVars(T, lb = 0.0, vtype=GRB.CONTINUOUS, name="Second_Doses")
     stocks = m.addVars(T, lb=0.0, vtype=GRB.CONTINUOUS, name="Stocks")
     
-    # Dictionary for the time sloot, needed in the objective function
+    # Dictionary for the time slot, needed in the objective function
 
     dictio = {}
     for i in range(0, T):
-        dictio[i] = [i+1]
+        dictio[i] = i+1
     
     time_slot, time  = gp.multidict(dictio)
 
@@ -79,6 +79,77 @@ def optimize_test_basic(T, B, Delta):
     else:
         print("\n***** No solutions found *****")
 
+def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity):
+
+    '''
+    B = {"Vaccine name": [B_List], "Vaccine name": [B_List] }
+    '''
+
+    print("\n***** Gurobipy solver - Capacity Multiple Vaccines*****\n")
+
+    m = gp.Model("vaccinations")
+
+    dicti = {}
+    dict_B = {}
+
+    for i in B:
+        for j in range(0, T):
+            dicti[(i, j)] = [j+1]
+            dict_B[(i,j)] = B[i][j] 
+    original_B = B
+    B = dict_B
+
+    combinations, time_frame = gp.multidict(dicti)
+
+    first_doses = m.addVars(combinations, lb=0.0, vtype=GRB.CONTINUOUS, name="First_Doses")
+    second_doses = m.addVars(combinations, lb = 0.0, vtype=GRB.CONTINUOUS, name="Second_Doses")
+    stocks = m.addVars(combinations, lb=0.0, vtype=GRB.CONTINUOUS, name="Stocks")
+
+    m.addConstrs( (first_doses.sum('*',j) + second_doses.sum('*', j) <= Capacity[j] for j in range(0, T)))  
+
+    m.addConstrs( (first_doses[j, i] == second_doses[j,i+Delta] for j, i in combinations if i < T-Delta ))
+    m.addConstrs( (first_doses[j, i] == 0 for j, i in combinations if i >= T-Delta ))
+
+    m.addConstrs( second_doses[j,i] == 0 for j, i in combinations if i < Delta)
+    
+    m.addConstrs ( (first_doses[j,i]  + 0 + stocks[j,i] == B[j,i] + 0 for j, i in combinations if i == 0))
+    m.addConstrs( (first_doses[j,i] + 0 + stocks[j,i] == B[j,i] + stocks[j,i-1] for j, i in combinations if i >= 1 and i < Delta))
+    m.addConstrs( (first_doses[j,i] + first_doses[j,i-Delta] + stocks[j,i] == B[j,i] + stocks[j, i-1] for j, i in combinations if i >= Delta))
+
+    m.addConstrs( (stocks[(j,T-1)] == 0 for j, i in combinations if i == T-1 ) )
+
+    m.setObjective((second_doses.prod(time_frame)), GRB.MINIMIZE)
+
+    print ("\n\n***** Optimize log *****\n\n")
+
+    m.optimize()
+
+    if (m.solCount > 0):
+
+        resultList = m.getAttr(GRB.Attr.X, m.getVars())
+        
+        print("\n***** Verbose solution printing *****\n")
+        
+        m.printAttr("X")
+
+        print("\n***** Solution's values list printing *****\n")
+        for i in range(0, len(original_B)):
+
+            first_doses_values = resultList[:T*(i+1)]
+            print("First_doses values_" + list(original_B)[i] + ": " + str(first_doses_values))
+
+            second_doses_values = resultList[T*(i+1):T*(i+2)]
+            print("Second_doses values_" + list(original_B)[i] + ": " + str(second_doses_values))
+
+            stock_values = resultList[T*(i+2):]
+            print("Stocks values_" + list(original_B)[i] + ": " + str(stock_values))
+
+        object_function_value = m.objVal
+        print("Object_function value: " + str(object_function_value))
+    
+    else:
+        print("\n***** No solutions found *****")
+
 def optimize_test_capacity(T, B, Delta, Capacity):
 
     print("\n***** Gurobipy solver - Capacity*****\n")
@@ -91,7 +162,7 @@ def optimize_test_capacity(T, B, Delta, Capacity):
     second_doses = m.addVars(T, lb = 0.0, vtype=GRB.CONTINUOUS, name="Second_Doses")
     stocks = m.addVars(T, lb=0.0, vtype=GRB.CONTINUOUS, name="Stocks")
     
-    # Dictionary for the time sloot, needed in the objective function
+    # Dictionary for the time slot, needed in the objective function
 
     dictio = {}
     for i in range(0, T):
@@ -182,6 +253,7 @@ def euristic(T, B, Delta):
     print("Unused doses: " + str(sum(B) - sum(second_doses_values)*2))
 
 if __name__ == "__main__":
-    optimize_test_basic(5, [40,30,20,10,20], 2)
-    optimize_test_capacity(5, [40,30,20,10,20], 2, [10,100,100,100,100])
-    euristic(5, [40,30,20,10,20], 2)
+    optimize_test_basic(5, [40,30,20,10,20], 3)
+    optimize_test_capacity(5, [40,30,20,10,20], 3, [100,100,100,100,100])
+    optimize_test_capacity_multiple_vaccines(5, {'Astrazeneca': [40,30,20,10,20], 'Pfizer':[40,30,20,10,20] }, 3, [100,100,100,100,100])
+    euristic(5, [40,30,20,10,20], 3)
