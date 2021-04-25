@@ -95,11 +95,7 @@ def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity):
     for i in B:
         for j in range(0, T):
             dicti[(i, j)] = [j+1]
-<<<<<<< HEAD
             dict_B[(i,j)] = B[i][j]  
-=======
-            dict_B[(i,j)] = B[i][j] 
->>>>>>> main
     original_B = B
     B = dict_B
 
@@ -120,11 +116,7 @@ def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity):
     m.addConstrs( (first_doses[j,i] + 0 + stocks[j,i] == B[j,i] + stocks[j,i-1] for j, i in combinations if i >= 1 and i < Delta))
     m.addConstrs( (first_doses[j,i] + first_doses[j,i-Delta] + stocks[j,i] == B[j,i] + stocks[j, i-1] for j, i in combinations if i >= Delta))
 
-<<<<<<< HEAD
     m.addConstrs( (stocks[j,i] == 0 for j, i in combinations if i == T-1 ) )
-=======
-    m.addConstrs( (stocks[(j,T-1)] == 0 for j, i in combinations if i == T-1 ) )
->>>>>>> main
 
     m.setObjective((second_doses.prod(time_frame)), GRB.MINIMIZE)
 
@@ -137,17 +129,12 @@ def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity):
         resultList = m.getAttr(GRB.Attr.X, m.getVars())
         
         print("\n***** Verbose solution printing *****\n")
-<<<<<<< HEAD
-
-=======
->>>>>>> main
         
         m.printAttr("X")
 
         print("\n***** Solution's values list printing *****\n")
         for i in range(0, len(original_B)):
 
-<<<<<<< HEAD
             first_doses_values = resultList[T*i:T*(i+1)]
             print("First_doses values_" + list(original_B)[i] + ": " + str(first_doses_values))
 
@@ -159,15 +146,6 @@ def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity):
         for i in range(0, len(original_B)):
 
             stock_values = resultList[T*(i+2*len(original_B)):T*(i+1+2*len(original_B))]
-=======
-            first_doses_values = resultList[:T*(i+1)]
-            print("First_doses values_" + list(original_B)[i] + ": " + str(first_doses_values))
-
-            second_doses_values = resultList[T*(i+1):T*(i+2)]
-            print("Second_doses values_" + list(original_B)[i] + ": " + str(second_doses_values))
-
-            stock_values = resultList[T*(i+2):]
->>>>>>> main
             print("Stocks values_" + list(original_B)[i] + ": " + str(stock_values))
 
         object_function_value = m.objVal
