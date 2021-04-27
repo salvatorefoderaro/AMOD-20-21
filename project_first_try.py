@@ -251,13 +251,79 @@ def euristic(T, B, Delta):
         object_function_value += second_doses_values[j] * (j+ Delta + 1)
     
     print("Second_doses values: " + str(second_doses_values))
+    print("Object function value: " + str(object_function_value))
+    print("Unused doses: " + str(sum(B) - sum(second_doses_values)*2))
+
+def euristic_with_stocks(T, B, Delta):
+
+    print("\n--------------------\n")
+    print("***** Test euristic with stocks *****\n")
+
+    second_doses_values = [0.0] * T
+    object_function_value = 0
+
+    if (sum(B[:len(B)-Delta]) > int(sum(B)/2)):
+
+        second_doses_values[T-1] = int(sum(B)/2)
+        
+        for j in range(0, len(second_doses_values)):
+            object_function_value += second_doses_values[j] * (j+ Delta + 1)
+
+        print("Second_doses values: " + str(second_doses_values))
+        print("Object function value: " + str(object_function_value))
+        print("Unused doses: " + str(sum(B) - sum(second_doses_values)*2))
+
+    else:
+        print("No solutions available")
+
+'''
+def euristic_with_stocks(T, B, Delta):
+
+    print("\n--------------------\n")
+    print("***** Test euristic with stocks - Draft *****\n")
+
+    second_doses_values = []
+    object_function_value = 0
+    stocks = 0
+
+    #       { 0, i < Delta
+    # y_i = 
+    #       { min (b_{i-Delta}, b_i), i >= Delta
+
+    for i in range(Delta, len(B)):
+        
+        if i == len(B)-1:
+            print(B)
+            second_doses_values.append((B[i-Delta]+B[i])/2)
+        
+        else:
+
+            stocks = abs(B[i-Delta]-B[i])
+            min_value = min(B[i-Delta], B[i])
+
+            second_doses_values.append(min_value)
+            if B[i-Delta] - stocks >= 0:
+                B[i-Delta] -= stocks
+                B[i-Delta+1] += B[i-Delta]
+
+            B[i-Delta] -= min_value
+            B[i] -= min_value
+
+
+    for j in range(0, len(second_doses_values)):
+        object_function_value += second_doses_values[j] * (j+ Delta + 1)
+    
+    print("Second_doses values: " + str(second_doses_values))
 
     print("Object function value: " + str(object_function_value))
 
-    print("Unused doses: " + str(sum(B) - sum(second_doses_values)*2))
+
+    print("Unused doses: " + str(B_value - sum(second_doses_values)*2))
+'''
 
 if __name__ == "__main__":
-    optimize_test_basic(5, [40,30,20,10,20], 3)
-    optimize_test_capacity(5, [40,30,20,10,20], 3, [100,100,100,100,100])
-    optimize_test_capacity_multiple_vaccines(5, {'Astrazeneca': [40,30,20,10,20], 'Pfizer':[40,30,20,10,20] }, 3, [100,100,100,100,100])
-    euristic(5, [40,30,20,10,20], 3)
+    optimize_test_basic(5, [10,6,8,4,2], 1)
+    #optimize_test_capacity(5, [40,30,20,10,20], 3, [100,100,100,100,100])
+    #optimize_test_capacity_multiple_vaccines(5, {'Astrazeneca': [40,30,20,10,20], 'Pfizer':[40,30,20,10,20] }, 3, [100,100,100,100,100])
+    #euristic(5, [40,30,20,10,20], 3)
+    euristic_with_stocks(5, [10,6,8,4,2], 1)
