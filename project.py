@@ -90,7 +90,7 @@ def optimal_solution(T, B, Delta):
     else:
         print("\n***** No solutions found *****")
 
-def euristic(T, B, Delta):
+def heuristic(T, B, Delta):
 
     x = [0.0]*T
     s = [0.0]*T
@@ -125,7 +125,7 @@ def euristic(T, B, Delta):
 if __name__ == "__main__":
     
     optimal_result = []
-    euristic_result = []
+    heuristic_result = []
 
     for i in os.listdir('csv'):
         
@@ -136,13 +136,13 @@ if __name__ == "__main__":
         data = add_column_to_df(data, result[0], "second_doses")
         data = add_column_to_df(data, result[1], "stock_values")
         optimal_result.append(result[2])
-        euristic_result = euristic(len(b_list), b_list, 1)
-
+        heu_result = heuristic(len(b_list), b_list, 1)
+        heuristic_result.append(heu_result)
         data.to_csv("csv_sol" + "/solution_" + i )
 
     instances = range(0, len(os.listdir('csv')))
 
     df = pd.DataFrame(instances, columns= ['instance'])
     df['optimal_value'] = optimal_result
-    df['euristic_value'] = euristic_result
+    df['heuristic_value'] = heuristic_result
     df.to_csv("result.csv", index=0)
