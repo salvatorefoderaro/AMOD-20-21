@@ -93,14 +93,17 @@ def optimal_solution(T, B, Delta):
 def heuristic(T, B, Delta):
 
     x = [0.0]*T
-    s = [0.0]*T
     y = [0.0]*T
+    s = B[:]
 
     object_function_value = 0
 
     x[T-Delta-1] = int(sum(B)/2)
     y[T-1] = x[T-Delta-1]
-    s[T-Delta] = B[T-Delta]
+    
+    s[T-1] = 0
+    s[T-Delta-1] = sum(B[:T-Delta]) - x[T-Delta-1]
+
     t = T-Delta-1
 
     while(t > 0):
@@ -117,6 +120,10 @@ def heuristic(T, B, Delta):
        
         t -= 1
 
+    print(y)
+    print(x)
+    print(s)
+
     for j in range(0, len(y)):
         object_function_value += y[j] * (j+ Delta + 1)
     
@@ -131,12 +138,12 @@ if __name__ == "__main__":
         
         data = pd.read_csv("csv" + "/" + i,  index_col=0) 
         b_list = get_column_from_df(data, "b")
-        result = optimal_solution(len(b_list), b_list, 1)
+        result = optimal_solution(len(b_list), b_list, 2)
 
         data = add_column_to_df(data, result[0], "second_doses")
         data = add_column_to_df(data, result[1], "stock_values")
         optimal_result.append(result[2])
-        heu_result = heuristic(len(b_list), b_list, 1)
+        heu_result = heuristic(len(b_list), b_list, 2)
         heuristic_result.append(heu_result)
         data.to_csv("csv_sol" + "/solution_" + i )
 
