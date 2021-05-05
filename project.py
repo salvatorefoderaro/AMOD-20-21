@@ -1,7 +1,13 @@
 import gurobipy as gp
 from gurobipy import GRB
 import pandas as pd
+import numpy as np
 import os
+
+PRINT = False
+DELTA = 21
+CSV_INPUT_FOLDER = "csv"
+CSV_OUTPUT_FOLDER = "csv_solution"
 
 def get_column_from_df(df, column_name):
     return df[column_name].values.tolist()
@@ -12,11 +18,15 @@ def add_column_to_df(df, values_list, new_column_name):
 
 def optimal_solution(T, B, Delta):
 
-    print("\n***** Gurobipy solver - Basic*****\n")
+    if PRINT == True:
+        print("\n***** Gurobipy solver - Basic*****\n")
 
     # Declare the model
     
     m = gp.Model("vaccinations")
+
+    if PRINT == False:
+        m.Params.LogToConsole = 0
 
     # Variables
 
@@ -59,36 +69,32 @@ def optimal_solution(T, B, Delta):
 
     m.setObjective((second_doses.prod(time)), GRB.MINIMIZE)
 
-    print ("\n\n***** Optimize log *****\n\n")
+    # print ("\n\n***** Optimize log *****\n\n")
 
     m.optimize()
 
     if (m.solCount > 0):
 
         resultList = m.getAttr(GRB.Attr.X, m.getVars())
-        
-        print("\n***** Verbose solution printing *****\n")
-        
-        m.printAttr("X")
-
-        print("\n***** Solution's values list printing *****\n")
-
         first_doses_values = resultList[:T]
-        print("First_doses values: " + str(first_doses_values))
-
         second_doses_values = resultList[T:2*T]
-        print("Second_doses values: " + str(second_doses_values))
-
         stock_values = resultList[2*T:]
-        print("Stocks values: " + str(stock_values))
-
         object_function_value = m.objVal
-        print("Object_function value: " + str(object_function_value))
+        
+        if PRINT == True:
+            m.printAttr("X")
+            print("\n***** Verbose solution printing *****\n")
+            print("\n***** Solution's values list printing *****\n")
+            print("First_doses values: " + str(first_doses_values))
+            print("Second_doses values: " + str(second_doses_values))
+            print("Stocks values: " + str(stock_values))
+            print("Object_function value: " + str(object_function_value))
     
-        return [second_doses_values, stock_values, object_function_value]
+        return [second_doses_values, stock_values, object_function_value/T]
 
     else:
-        print("\n***** No solutions found *****")
+        if PRINT == True:
+            print("\n***** No solutions found *****")
 
 def heuristic(T, B, Delta):
 
@@ -120,36 +126,36 @@ def heuristic(T, B, Delta):
        
         t -= 1
 
-    print(y)
-    print(x)
-    print(s)
-
     for j in range(0, len(y)):
-        object_function_value += y[j] * (j+ Delta + 1)
+        object_function_value += y[j] * (j + 1)
     
-    return object_function_value
+    return object_function_value/T
     
 if __name__ == "__main__":
     
     optimal_result = []
     heuristic_result = []
+    result_difference = []
 
-    for i in os.listdir('csv'):
+    for i in os.listdir(CSV_INPUT_FOLDER):
         
-        data = pd.read_csv("csv" + "/" + i,  index_col=0) 
-        b_list = get_column_from_df(data, "b")
-        result = optimal_solution(len(b_list), b_list, 2)
+        data = pd.read_csv(CSV_INPUT_FOLDER + "/" + i,  index_col=0) 
+        b_list = get_column_from_df(data, "ndosi")
+        result = optimal_solution(len(b_list), b_list, DELTA)
 
         data = add_column_to_df(data, result[0], "second_doses")
         data = add_column_to_df(data, result[1], "stock_values")
         optimal_result.append(result[2])
-        heu_result = heuristic(len(b_list), b_list, 2)
+        
+        heu_result = heuristic(len(b_list), b_list, DELTA)
         heuristic_result.append(heu_result)
-        data.to_csv("csv_sol" + "/solution_" + i )
-
-    instances = range(0, len(os.listdir('csv')))
-
+        result_difference.append( (heu_result-result[2])/(result[2]) *100)
+        
+        data.to_csv(CSV_OUTPUT_FOLDER + "/solution_" + i )
+    
+    instances = np.arange(1, len(optimal_result)+1, 1).tolist()
     df = pd.DataFrame(instances, columns= ['instance'])
     df['optimal_value'] = optimal_result
     df['heuristic_value'] = heuristic_result
-    df.to_csv("result.csv", index=0)
+    df['result_difference_%'] = result_difference
+    df.to_csv("comparison_result_optimal_heuristic.csv", index=0)
