@@ -145,11 +145,11 @@ if __name__ == "__main__":
 
         data = add_column_to_df(data, result[0], "second_doses")
         data = add_column_to_df(data, result[1], "stock_values")
-        optimal_result.append(result[2])
+        optimal_result.append("{:.2f}".format(result[2]))
         
         heu_result = heuristic(len(b_list), b_list, DELTA)
-        heuristic_result.append(heu_result)
-        result_difference.append( (heu_result-result[2])/(result[2]) *100)
+        heuristic_result.append("{:.2f}".format(heu_result))
+        result_difference.append("{:.2f}".format((heu_result-result[2])/(result[2]) *100))
         
         data.to_csv(CSV_OUTPUT_FOLDER + "/solution_" + i )
     
