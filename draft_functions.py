@@ -21,6 +21,9 @@ def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity):
     original_B = B
     B = dict_B
 
+    print(original_B)
+    print(B)
+
     combinations, time_frame = gp.multidict(dicti)
 
     first_doses = m.addVars(combinations, lb=0.0, vtype=GRB.CONTINUOUS, name="First_Doses")
@@ -29,23 +32,22 @@ def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity):
 
     m.addConstrs( (first_doses.sum('*',j) + second_doses.sum('*', j) <= Capacity[j] for j in range(0, T)))  
 
-    m.addConstrs( (first_doses[j, i] == second_doses[j,i+Delta] for j, i in combinations if i < T-Delta ))
-    m.addConstrs( (first_doses[j, i] == 0 for j, i in combinations if i >= T-Delta ))
+    m.addConstrs( (first_doses[j, i] == second_doses[j,i+Delta[j]] for j, i in combinations if i < T-Delta[j] ))
+    m.addConstrs( (first_doses[j, i] == 0 for j, i in combinations if i >= T-Delta[j] ))
 
-    m.addConstrs( second_doses[j,i] == 0 for j, i in combinations if i < Delta)
+    m.addConstrs( second_doses[j,i] == 0 for j, i in combinations if i < Delta[j])
     
-    m.addConstrs ( (first_doses[j,i]  + 0 + stocks[j,i] == B[j,i] + 0 for j, i in combinations if i == 0))
-    m.addConstrs( (first_doses[j,i] + 0 + stocks[j,i] == B[j,i] + stocks[j,i-1] for j, i in combinations if i >= 1 and i < Delta))
-    m.addConstrs( (first_doses[j,i] + first_doses[j,i-Delta] + stocks[j,i] == B[j,i] + stocks[j, i-1] for j, i in combinations if i >= Delta))
+    m.addConstrs( (first_doses[j,i]  + 0 + stocks[j,i] == B[j,i] + 0 for j, i in combinations if i == 0))
+    m.addConstrs( (first_doses[j,i] + 0 + stocks[j,i] == B[j,i] + stocks[j,i-1] for j, i in combinations if i >= 1 and i < Delta[j]))
+    m.addConstrs( (first_doses[j,i] + first_doses[j,i-Delta[j]] + stocks[j,i] == B[j,i] + stocks[j, i-1] for j, i in combinations if i >= Delta[j]))
 
     m.addConstrs( (stocks[j,i] == 0 for j, i in combinations if i == T-1 ) )
 
     m.setObjective((second_doses.prod(time_frame)), GRB.MINIMIZE)
 
     print ("\n\n***** Optimize log *****\n\n")
-
     m.optimize()
-
+    print (m.display())
     if (m.solCount > 0):
 
         resultList = m.getAttr(GRB.Attr.X, m.getVars())
@@ -126,6 +128,7 @@ def optimize_test_capacity(T, B, Delta, Capacity):
     m.setObjective((second_doses.prod(time)), GRB.MINIMIZE)
 
     print ("\n\n***** Optimize log *****\n\n")
+
 
     m.optimize()
 
@@ -246,6 +249,6 @@ def euristic_with_stocks(T, B, Delta):
 if __name__ == "__main__":
     
     #optimize_test_capacity(5, [40,30,20,10,20], 3, [100,100,100,100,100])
-    #optimize_test_capacity_multiple_vaccines(5, {'Astrazeneca': [40,30,20,10,20], 'Pfizer':[40,30,20,10,20] }, 3, [100,100,100,100,100])
+    optimize_test_capacity_multiple_vaccines(5, {'Astrazeneca': [40,30,20,10,20], 'Pfizer':[40,30,20,10,20] }, {'Astrazeneca': 1, 'Pfizer':2}, [48, 48, 48, 48, 48])
     #euristic(5, [40,30,20,10,20], 3)
     #euristic_with_stocks(5, [10,6,8,4,2], 1)
