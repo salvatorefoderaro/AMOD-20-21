@@ -104,7 +104,7 @@ def add_column_to_df(df, values_list, new_column_name):
 
 if __name__ == "__main__":
     
-    optimal_result = {"c": [], "2c": [], "4c": [], "6c": [], "8c": [], "10c": []}
+    optimal_result = {"c": [], "2c": [], "3c": [],"4c": [], "5c": [], "6c": [], "7c": [], "8c": [], "9c": [], "10c": []}
     heuristic_result = []
     result_difference = []
 
@@ -139,11 +139,15 @@ if __name__ == "__main__":
         total_capacity = sum(b_list_0) + sum(b_list_1) + sum(b_list_2)
 
         capacity = {}
-        capacity["c"] = int(total_capacity/180) 
+        capacity["c"] =  1 * int(total_capacity/180)
         capacity["2c"] = 2 * int(total_capacity/180) 
+        capacity["3c"] = 3 * int(total_capacity/180) 
         capacity["4c"] = 4 * int(total_capacity/180) 
+        capacity["5c"] = 5 * int(total_capacity/180) 
         capacity["6c"] = 6 * int(total_capacity/180)
+        capacity["7c"] = 7 * int(total_capacity/180) 
         capacity["8c"] = 8 * int(total_capacity/180) 
+        capacity["9c"] = 9 * int(total_capacity/180) 
         capacity["10c"] = 10 * int(total_capacity/180) 
 
         # Calculate the optimal value
@@ -161,7 +165,7 @@ if __name__ == "__main__":
             df["capacity"] = [capacity[u]] * 180
         
             # Write the solution to the single file
-            df.to_csv(CSV_OUTPUT_FOLDER + "/capacity_" + u +"/solution_" + file_list[i] )
+            # df.to_csv(CSV_OUTPUT_FOLDER + "/capacity_" + u +"/solution_" + file_list[i] )
 
     instances = np.arange(1, len(optimal_result["c"]) + 1, 1).tolist()
 
@@ -169,9 +173,13 @@ if __name__ == "__main__":
     df = pd.DataFrame(instances, columns= ['instance'])
     df['c_optimal_value'] = optimal_result["c"]
     df['2c_optimal_value'] = optimal_result["2c"]
+    df['3c_optimal_value'] = optimal_result["3c"]
     df['4c_optimal_value'] = optimal_result["4c"]
+    df['5c_optimal_value'] = optimal_result["5c"]
     df['6c_optimal_value'] = optimal_result["6c"]
+    df['7c_optimal_value'] = optimal_result["7c"]
     df['8c_optimal_value'] = optimal_result["8c"]   
+    df['9c_optimal_value'] = optimal_result["9c"]
     df['10c_optimal_value'] = optimal_result["10c"] 
 
     df.to_csv("result_v2.csv", index=0)
