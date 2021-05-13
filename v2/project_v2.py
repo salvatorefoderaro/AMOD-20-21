@@ -114,7 +114,7 @@ if __name__ == "__main__":
 
     instances = np.arange(1, T + 1, 1).tolist()
 
-    for i in range(0, len(os.listdir(CSV_INPUT_FOLDER)) -2-900 ):
+    for i in range(0, len(os.listdir(CSV_INPUT_FOLDER)) -2-950 ):
 
         print("Processing instance: " + str(i))
 
@@ -155,6 +155,8 @@ if __name__ == "__main__":
 
         # Calculate the optimal value
 
+        somma_seconde_dosi = 0
+
         for u in capacity:
 
             result = optimize_test_capacity_multiple_vaccines(len(b_list_0), b_list, DELTA, capacity[u])
@@ -171,7 +173,7 @@ if __name__ == "__main__":
             # Write the solution to the single file
             # df.to_csv(CSV_OUTPUT_FOLDER + "/capacity_" + u +"/solution_" + file_list[i] )
 
-    instances = np.arange(1, len(optimal_result["c"]) + 1-900, 1).tolist()
+    instances = np.arange(1, len(optimal_result["c"]) + 1-950, 1).tolist()
 
     # Write the solution to the summary file
     df = pd.DataFrame(instances, columns= ['instance'])
