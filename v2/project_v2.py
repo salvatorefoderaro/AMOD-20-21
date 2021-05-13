@@ -110,6 +110,8 @@ if __name__ == "__main__":
 
     file_list = os.listdir(CSV_INPUT_FOLDER)
 
+    somma_seconde_dosi = 0
+
     instances = np.arange(1, T + 1, 1).tolist()
 
     for i in range(0, len(os.listdir(CSV_INPUT_FOLDER)) -2-900 ):
@@ -161,8 +163,9 @@ if __name__ == "__main__":
                 df["first_doses_" + j] = result[0][j]
                 df["second_doses_" + j] = result[1][j]
                 df["stock_values_" + j] = result[2][j]
+                somma_seconde_dosi += sum(result[1][j])
 
-            optimal_result[u].append(result[3]/180)
+            optimal_result[u].append(result[3]/ somma_seconde_dosi)
             df["capacity"] = [capacity[u]] * 180
         
             # Write the solution to the single file
