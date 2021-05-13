@@ -104,7 +104,7 @@ def add_column_to_df(df, values_list, new_column_name):
 
 if __name__ == "__main__":
     
-    optimal_result = {"c": [], "2c": [], "3c": [],"4c": [], "5c": [], "6c": [], "7c": [], "8c": [], "9c": [], "10c": []}
+    optimal_result = {"c": [], "2c": [], "3c": [],"4c": [], "5c": [], "6c": [], "7c": [], "8c": [], "9c": [], "10c": [], "11c": []}
     heuristic_result = []
     result_difference = []
 
@@ -112,7 +112,7 @@ if __name__ == "__main__":
 
     instances = np.arange(1, T + 1, 1).tolist()
 
-    for i in range(0, len(os.listdir(CSV_INPUT_FOLDER)) -2 ):
+    for i in range(0, len(os.listdir(CSV_INPUT_FOLDER)) -2-900 ):
 
         print("Processing instance: " + str(i))
 
@@ -139,16 +139,17 @@ if __name__ == "__main__":
         total_capacity = sum(b_list_0) + sum(b_list_1) + sum(b_list_2)
 
         capacity = {}
-        capacity["c"] =  1 * int(total_capacity/180)
-        capacity["2c"] = 2 * int(total_capacity/180) 
-        capacity["3c"] = 3 * int(total_capacity/180) 
-        capacity["4c"] = 4 * int(total_capacity/180) 
-        capacity["5c"] = 5 * int(total_capacity/180) 
-        capacity["6c"] = 6 * int(total_capacity/180)
-        capacity["7c"] = 7 * int(total_capacity/180) 
-        capacity["8c"] = 8 * int(total_capacity/180) 
-        capacity["9c"] = 9 * int(total_capacity/180) 
-        capacity["10c"] = 10 * int(total_capacity/180) 
+        capacity["c"] =   1 * int(total_capacity/180)
+        capacity["2c"] =  1.1 * int(total_capacity/180) 
+        capacity["3c"] =  1.2 * int(total_capacity/180) 
+        capacity["4c"] =  1.3 * int(total_capacity/180) 
+        capacity["5c"] =  1.4 * int(total_capacity/180) 
+        capacity["6c"] =  1.5 * int(total_capacity/180)
+        capacity["7c"] =  1.6 * int(total_capacity/180) 
+        capacity["8c"] =  1.7 * int(total_capacity/180) 
+        capacity["9c"] =  1.8 * int(total_capacity/180) 
+        capacity["10c"] = 1.9 * int(total_capacity/180) 
+        capacity["11c"] = 2.0 * int(total_capacity/180) 
 
         # Calculate the optimal value
 
@@ -161,25 +162,26 @@ if __name__ == "__main__":
                 df["second_doses_" + j] = result[1][j]
                 df["stock_values_" + j] = result[2][j]
 
-            optimal_result[u].append(result[3])
+            optimal_result[u].append(result[3]/180)
             df["capacity"] = [capacity[u]] * 180
         
             # Write the solution to the single file
             # df.to_csv(CSV_OUTPUT_FOLDER + "/capacity_" + u +"/solution_" + file_list[i] )
 
-    instances = np.arange(1, len(optimal_result["c"]) + 1, 1).tolist()
+    instances = np.arange(1, len(optimal_result["c"]) + 1-900, 1).tolist()
 
     # Write the solution to the summary file
     df = pd.DataFrame(instances, columns= ['instance'])
     df['c_optimal_value'] = optimal_result["c"]
-    df['2c_optimal_value'] = optimal_result["2c"]
-    df['3c_optimal_value'] = optimal_result["3c"]
-    df['4c_optimal_value'] = optimal_result["4c"]
-    df['5c_optimal_value'] = optimal_result["5c"]
-    df['6c_optimal_value'] = optimal_result["6c"]
-    df['7c_optimal_value'] = optimal_result["7c"]
-    df['8c_optimal_value'] = optimal_result["8c"]   
-    df['9c_optimal_value'] = optimal_result["9c"]
-    df['10c_optimal_value'] = optimal_result["10c"] 
+    df['1.1c_optimal_value'] = optimal_result["2c"]
+    df['1.2c_optimal_value'] = optimal_result["3c"]
+    df['1.3c_optimal_value'] = optimal_result["4c"]
+    df['1.4c_optimal_value'] = optimal_result["5c"]
+    df['1.5c_optimal_value'] = optimal_result["6c"]
+    df['1.6c_optimal_value'] = optimal_result["7c"]
+    df['1.7c_optimal_value'] = optimal_result["8c"]   
+    df['1.8c_optimal_value'] = optimal_result["9c"]
+    df['1.9c_optimal_value'] = optimal_result["10c"] 
+    df['2c_optimal_value'] = optimal_result["11c"] 
 
     df.to_csv("result_v2.csv", index=0)
