@@ -3,6 +3,8 @@ from gurobipy import GRB
 import pandas as pd
 import numpy as np
 import os
+from pathlib import Path
+from statistics import mean
 
 PRINT = False
 DELTA = {'Pfizer': 21, 'Moderna': 28, 'Astrazeneca': 78}
@@ -10,13 +12,13 @@ CSV_INPUT_FOLDER = "input_csv"
 CSV_OUTPUT_FOLDER = "csv_solution_v2"
 T = 180
 
+def checkValue(value):
+    if value < 0:
+        return 0
+    else:
+        return value
+
 def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity):
-
-    '''
-    B = {"Vaccine name": [B_List], "Vaccine name": [B_List] }
-    '''
-
-    # print("\n***** Gurobipy solver - Capacity Multiple Vaccines*****\n")
 
     m = gp.Model("vaccinations")
 
@@ -50,24 +52,16 @@ def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity):
     m.addConstrs( (first_doses[j,i] + 0 + stocks[j,i] == B[j,i] + stocks[j,i-1] for j, i in combinations if i >= 1 and i < Delta[j]))
     m.addConstrs( (first_doses[j,i] + first_doses[j,i-Delta[j]] + stocks[j,i] == B[j,i] + stocks[j, i-1] for j, i in combinations if i >= Delta[j]))
 
-    # m.addConstrs( (stocks[j,i] == 0 for j, i in combinations if i == T-1 ) )
+    # m.addConstrs( (stocks[j,i] <= 1000000  for j, i in combinations if i == T-1 ) )
 
     m.setObjective((second_doses.prod(time_frame) + 1000 * ( stocks['Pfizer', T-1] + stocks['Moderna', T-1] + stocks['Astrazeneca', T-1])), GRB.MINIMIZE)
-
-    # print ("\n\n***** Optimize log *****\n\n")
 
     m.optimize()
 
     if (m.solCount > 0):
 
         resultList = m.getAttr(GRB.Attr.X, m.getVars())
-        
-        # print("\n***** Verbose solution printing *****\n")
-        
-        m.printAttr("X")
-
-        # print("\n***** Solution's values list printing *****\n")
-
+            
         first_doses_dict = {}
         second_doses_dict = {}
         stocks_dict = {}
@@ -76,21 +70,17 @@ def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity):
             
             first_doses_dict[list(original_B)[i]] = resultList[T*i:T*(i+1)]
             first_doses_values = resultList[T*i:T*(i+1)]
-            #print("First_doses values_" + list(original_B)[i] + ": " + str(first_doses_values))
 
         for i in range(0, len(original_B)):
 
             second_doses_dict[list(original_B)[i]] = resultList[T*(i+len(original_B)):T*(i+1+len(original_B))]
             second_doses_values = resultList[T*(i+len(original_B)):T*(i+1+len(original_B))]
-            #print("Second_doses values_" + list(original_B)[i] + ": " + str(second_doses_values))
         
         for i in range(0, len(original_B)):
             stocks_dict[list(original_B)[i]] = resultList[T*(i+2*len(original_B)):T*(i+1+2*len(original_B))]
             stock_values = resultList[T*(i+2*len(original_B)):T*(i+1+2*len(original_B))]
-            #print("Stocks values_" + list(original_B)[i] + ": " + str(stock_values))
 
         object_function_value = m.objVal
-        # print("Object_function value: " + str(object_function_value))
         return[first_doses_dict, second_doses_dict, stocks_dict, object_function_value]
     else:
         print("\n***** No solutions found *****")
@@ -102,19 +92,79 @@ def add_column_to_df(df, values_list, new_column_name):
     df[new_column_name] = values_list
     return df
 
+def heuristic_v2(b_list, delta, capacity):
+
+    vaccines = { "Pfizer": [21, [0]*180, [0]*180], "Moderna": [28, [0]*180, [0]*180], "Astrazeneca": [78, [0]*180, [0]*180] }
+    stocks = []
+
+    object_function = 0 
+    total_second_doses = 0
+    index = 0
+    sum_penality = 0
+
+    for t in range(0, 180):
+        
+        index = 0
+        remain_capacity = capacity
+        for u in vaccines:
+            delta = vaccines[u][0]
+            first_doses = vaccines[u][1]
+            stocks = vaccines[u][2]
+            arrival = b_list[u]
+
+            if t + delta < 180:
+
+                if t == 0:
+                    first_doses_somministrated = arrival[t]
+                elif t-delta >= 0 and t+1-delta < 0:
+                    first_doses_somministrated = stocks[t-1] - first_doses[t-delta] + arrival[t]
+                elif t-delta >= 0 and t+1-delta >= 0:
+                    first_doses_somministrated = stocks[t-1] - first_doses[t-delta] - first_doses[t+1-delta] + arrival[t]
+
+                if first_doses_somministrated < 0:
+                    first_doses_somministrated = 0
+
+                if index == 0:
+                    first_doses_somministrated = min(first_doses_somministrated, capacity * 0.33)
+                elif index == 1:
+                    first_doses_somministrated = min(first_doses_somministrated, capacity * 0.33)
+                elif index == 2:
+                    first_doses_somministrated = min(first_doses_somministrated, capacity * 0.33)
+
+                total_second_doses += first_doses_somministrated
+                object_function += (t+1+delta)*first_doses_somministrated
+                vaccines[u][1][t] = first_doses_somministrated
+                
+                if t == 0:
+                    vaccines[u][2][t] = first_doses_somministrated  + arrival[t]
+                elif t - delta < 0:
+                    vaccines[u][2][t] = stocks[t-1] - first_doses_somministrated + arrival[t]
+                elif t - delta >= 0:
+                    vaccines[u][2][t] = stocks[t-1] - first_doses_somministrated - first_doses[t-delta] + arrival[t]
+                elif t+1-delta >=0:
+                    vaccines[u][2][t] = max(stocks[t-1] - first_doses_somministrated - first_doses[t-delta] + arrival[t], first_doses[t+1-delta])
+            else:
+                vaccines[u][2][t] = max(stocks[t-1]  - first_doses[t-delta]  + arrival[t], first_doses[t+1-delta])
+
+            index += 1
+
+    sum_penality += vaccines["Pfizer"][2][180-1] 
+    sum_penality += vaccines["Astrazeneca"][2][180-1] 
+    sum_penality += vaccines["Moderna"][2][180-1]
+
+    return ([object_function/total_second_doses, sum_penality])
+
 if __name__ == "__main__":
     
-    optimal_result = {"c": [], "2c": [], "3c": [],"4c": [], "5c": [], "6c": [], "7c": [], "8c": [], "9c": [], "10c": [], "11c": []}
-    heuristic_result = []
-    result_difference = []
+    penality_optimal_result = {"c": [], "1.2 c": [], "1.4 c": [],"1.6 c": [], "1.8 c": [], "2 c": [], "2.5 c": [], "3 c": [], "4 c": [], "5 c": [], "6 c": [], "7 c" :[], "8 c": []}
+    optimal_result = {"c": [], "1.2 c": [], "1.4 c": [],"1.6 c": [], "1.8 c": [], "2 c": [], "2.5 c": [], "3 c": [], "4 c": [], "5 c": [], "6 c": [], "7 c" :[], "8 c": []}
+    heuristic_result = {"c": [], "1.2 c": [], "1.4 c": [],"1.6 c": [], "1.8 c": [], "2 c": [], "2.5 c": [], "3 c": [], "4 c": [], "5 c": [], "6 c": [], "7 c" :[], "8 c": []}
+    penality_heuristic =  {"c": [], "1.2 c": [], "1.4 c": [],"1.6 c": [], "1.8 c": [], "2 c": [], "2.5 c": [], "3 c": [], "4 c": [], "5 c": [], "6 c": [], "7 c" :[], "8 c": []}
 
     file_list = os.listdir(CSV_INPUT_FOLDER)
-
-    somma_seconde_dosi = 0
-
     instances = np.arange(1, T + 1, 1).tolist()
 
-    for i in range(0, len(os.listdir(CSV_INPUT_FOLDER)) -2-950 ):
+    for i in range(0, len(os.listdir(CSV_INPUT_FOLDER)) -2):
 
         print("Processing instance: " + str(i))
 
@@ -141,52 +191,93 @@ if __name__ == "__main__":
         total_capacity = sum(b_list_0) + sum(b_list_1) + sum(b_list_2)
 
         capacity = {}
-        capacity["c"] =   1 * int(total_capacity/180)
-        capacity["2c"] =  1.1 * int(total_capacity/180) 
-        capacity["3c"] =  1.2 * int(total_capacity/180) 
-        capacity["4c"] =  1.3 * int(total_capacity/180) 
-        capacity["5c"] =  1.4 * int(total_capacity/180) 
-        capacity["6c"] =  1.5 * int(total_capacity/180)
-        capacity["7c"] =  1.6 * int(total_capacity/180) 
-        capacity["8c"] =  1.7 * int(total_capacity/180) 
-        capacity["9c"] =  1.8 * int(total_capacity/180) 
-        capacity["10c"] = 1.9 * int(total_capacity/180) 
-        capacity["11c"] = 2.0 * int(total_capacity/180) 
+        capacity["c"] =   int(1 * int(total_capacity/180))
+        capacity["1.2 c"] =  int(1.2 * int(total_capacity/180)) 
+        capacity["1.4 c"] =  int(1.4 * int(total_capacity/180)) 
+        capacity["1.6 c"] =  int(1.6 * int(total_capacity/180)) 
+        capacity["1.8 c"] =  int(1.8 * int(total_capacity/180)) 
+        capacity["2 c"] =  int(2 * int(total_capacity/180))
+        capacity["2.5 c"] =  int(2.5 * int(total_capacity/180))  
+        capacity["3 c"] =  int(3 * int(total_capacity/180))  
+        capacity["4 c"] =  int(4 * int(total_capacity/180))  
+        capacity["5 c"] =  int(5 * int(total_capacity/180))  
+        capacity["6 c"] =  int(6 * int(total_capacity/180))  
+        capacity["7 c"] =  int(7 * int(total_capacity/180))  
+        capacity["8 c"] =  int(8 * int(total_capacity/180))  
 
         # Calculate the optimal value
-
-        somma_seconde_dosi = 0
 
         for u in capacity:
 
             result = optimize_test_capacity_multiple_vaccines(len(b_list_0), b_list, DELTA, capacity[u])
+            heu_result = heuristic_v2(b_list, DELTA, capacity[u])
+            second_doses_sum = 0
+            penality_sum = 0
 
             for j in result[0]:
                 df["first_doses_" + j] = result[0][j]
                 df["second_doses_" + j] = result[1][j]
                 df["stock_values_" + j] = result[2][j]
-                somma_seconde_dosi += sum(result[1][j])
+                second_doses_sum += sum(result[1][j])
+                penality_sum += result[2][j][180-1]
 
-            optimal_result[u].append(result[3]/ somma_seconde_dosi)
             df["capacity"] = [capacity[u]] * 180
+            
+            solution_penality = 1000 * penality_sum
+            optimal_result_without_penality = (result[3] - solution_penality) / second_doses_sum
+
+            heuristic_result[u].append( heu_result[0] )
+            penality_heuristic[u].append( heu_result[1] )
+
+            penality_optimal_result[u].append( penality_sum )
+            optimal_result[u].append( optimal_result_without_penality )
         
             # Write the solution to the single file
-            # df.to_csv(CSV_OUTPUT_FOLDER + "/capacity_" + u +"/solution_" + file_list[i] )
+            output_dir = Path("csv_solution_v2/capacity_" + u)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            df.to_csv(CSV_OUTPUT_FOLDER + "/capacity_" + u + "/solution_" + file_list[i] )
 
-    instances = np.arange(1, len(optimal_result["c"]) + 1-950, 1).tolist()
+    instances = np.arange(1, len(optimal_result["c"]) + 1, 1).tolist()
 
     # Write the solution to the summary file
     df = pd.DataFrame(instances, columns= ['instance'])
-    df['c_optimal_value'] = optimal_result["c"]
-    df['1.1c_optimal_value'] = optimal_result["2c"]
-    df['1.2c_optimal_value'] = optimal_result["3c"]
-    df['1.3c_optimal_value'] = optimal_result["4c"]
-    df['1.4c_optimal_value'] = optimal_result["5c"]
-    df['1.5c_optimal_value'] = optimal_result["6c"]
-    df['1.6c_optimal_value'] = optimal_result["7c"]
-    df['1.7c_optimal_value'] = optimal_result["8c"]   
-    df['1.8c_optimal_value'] = optimal_result["9c"]
-    df['1.9c_optimal_value'] = optimal_result["10c"] 
-    df['2c_optimal_value'] = optimal_result["11c"] 
+    df_summary = pd.DataFrame(instances, columns= ['instance'])
+    capacity_list = []
+
+    avg_optimal_value = []
+    avg_heuristic_value = []
+    avg_result_difference = []
+
+    avg_stocks_optimal = []
+    avg_stocks_heuristic = []
+    avg_stocks_difference = []
+
+    for k in optimal_result:
+        df[k + " - optimal solution"] = optimal_result[k]
+        df[k + " - optimal remain stocks"] = penality_optimal_result[k]
+        df[k + " - heuristic solution"] = heuristic_result[k]
+        df[k + " - heuristic remain stocks"] = penality_heuristic[k]
+        
+        capacity_list.append(k)
+
+        avg_optimal_value.append(round( mean(optimal_result[k] ), 2))
+        avg_heuristic_value.append(round( mean(heuristic_result[k] ), 2))
+        avg_result_difference.append(round ( (mean(heuristic_result[k]) - mean(optimal_result[k])) / mean(heuristic_result[k]), 2))
+
+        avg_stocks_optimal.append(round( mean(penality_optimal_result[k] ), 2))
+        avg_stocks_heuristic.append(round( mean(penality_heuristic[k] ), 2))
+        avg_stocks_difference.append(round ( (mean(penality_heuristic[k]) - mean(penality_optimal_result[k])) / mean(penality_heuristic[k]), 2))
 
     df.to_csv("result_v2.csv", index=0)
+
+    df = pd.DataFrame(capacity_list, columns= ['Capacity'])
+    df['Optimal value'] = avg_optimal_value
+    df['Heuristic value'] = avg_heuristic_value
+    df['Result difference'] = avg_result_difference
+
+    df['Optimal rem. stocks'] = avg_stocks_optimal
+    df['Heuristic rem. stocks'] = avg_stocks_heuristic
+    df['Stocks difference'] = avg_stocks_difference
+
+    df.to_csv("result_summary_v2.csv", index = 0)

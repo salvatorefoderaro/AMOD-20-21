@@ -133,7 +133,6 @@ def optimize_test_capacity(T, B, Delta, Capacity):
 
     print ("\n\n***** Optimize log *****\n\n")
 
-
     m.optimize()
 
     if (m.solCount > 0):
