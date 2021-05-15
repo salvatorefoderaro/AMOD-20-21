@@ -11,7 +11,9 @@ DELTA = {'Pfizer': 21, 'Moderna': 28, 'Astrazeneca': 78}
 CSV_INPUT_FOLDER = "input_csv"
 CSV_OUTPUT_FOLDER = "csv_solution_v2"
 T = 180
-NUMBER_OF_ELEMENT = 10
+NUMBER_OF_ELEMENT = 1000
+LIMIT_CAPACITY = 12
+INCREMENT = 0.1
 
 def checkValue(value):
     if value < 0:
@@ -163,12 +165,12 @@ if __name__ == "__main__":
     penality_heuristic = {}
 
     num = 1
-    while(num < 12):
+    while(num < LIMIT_CAPACITY):
         penality_optimal_result[str(num) + " c"] = []
         optimal_result[str(num) + " c"] = []
         heuristic_result[str(num) + " c"] = []
         penality_heuristic[str(num) + " c"] = []
-        num += 0.1
+        num += INCREMENT
         num = round(num, 2)
 
     file_list = os.listdir(CSV_INPUT_FOLDER)
@@ -200,9 +202,9 @@ if __name__ == "__main__":
         capacity = {}
 
         num = 1
-        while(num < 12):
+        while(num < LIMIT_CAPACITY):
             capacity[str(num) + " c"] =  int(num * int(total_capacity/180))
-            num += 0.1
+            num += INCREMENT
             num = round(num, 2)
 
         # For each capacity...
@@ -265,11 +267,11 @@ if __name__ == "__main__":
 
         avg_optimal_value.append(round( mean(optimal_result[k] ), 2))
         avg_heuristic_value.append(round( mean(heuristic_result[k] ), 2))
-        avg_result_difference.append(round( (mean(heuristic_result[k]) - mean(optimal_result[k])) / mean(heuristic_result[k]), 2))
+        avg_result_difference.append(round( (mean(heuristic_result[k]) - mean(optimal_result[k])) / mean(heuristic_result[k]), 4))
 
         avg_stocks_optimal.append(round( mean(penality_optimal_result[k] ), 2))
         avg_stocks_heuristic.append(round( mean(penality_heuristic[k] ), 2))
-        avg_stocks_difference.append(round( (mean(penality_heuristic[k]) - mean(penality_optimal_result[k])) / mean(penality_heuristic[k]), 2))
+        avg_stocks_difference.append(round( (mean(penality_heuristic[k]) - mean(penality_optimal_result[k])) / mean(penality_heuristic[k]), 4))
 
     df.to_csv("result_v2.csv", index=0)
 
