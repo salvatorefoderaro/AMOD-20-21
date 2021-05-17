@@ -12,14 +12,8 @@ CSV_INPUT_FOLDER = "input_csv"
 CSV_OUTPUT_FOLDER = "csv_solution_v2"
 T = 180
 NUMBER_OF_ELEMENT = 1000
-LIMIT_CAPACITY = 12
+LIMIT_CAPACITY = 8
 INCREMENT = 0.1
-
-def checkValue(value):
-    if value < 0:
-        return 0
-    else:
-        return value
 
 def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity):
 
@@ -95,7 +89,7 @@ def add_column_to_df(df, values_list, new_column_name):
     df[new_column_name] = values_list
     return df
 
-def heuristic_v2(b_list, delta, capacity):
+def heuristic_v2(b_list, capacity):
 
     vaccines = { "Pfizer": [21, [0]*180, [0]*180], "Moderna": [28, [0]*180, [0]*180], "Astrazeneca": [78, [0]*180, [0]*180] }
     stocks = []
@@ -119,9 +113,13 @@ def heuristic_v2(b_list, delta, capacity):
 
                 if t == 0:
                     first_doses_somministrated = arrival[t]
+                    first_doses_somministrated = int(first_doses_somministrated/2)
+                elif t-delta < 0:
+                    first_doses_somministrated = stocks[t-1] + arrival[t]
+                    first_doses_somministrated = int(first_doses_somministrated/2)
                 elif t-delta >= 0 and t+1-delta < 0:
                     first_doses_somministrated = stocks[t-1] - first_doses[t-delta] + arrival[t]
-                elif t-delta >= 0 and t+1-delta >= 0:
+                else:
                     first_doses_somministrated = stocks[t-1] - first_doses[t-delta] - first_doses[t+1-delta] + arrival[t]
 
                 if first_doses_somministrated < 0:
@@ -145,9 +143,9 @@ def heuristic_v2(b_list, delta, capacity):
                 elif t - delta >= 0 and t+1-delta < 0:
                     vaccines[u][2][t] = stocks[t-1] - first_doses_somministrated - first_doses[t-delta] + arrival[t]
                 else:
-                    vaccines[u][2][t] = max(stocks[t-1] - first_doses_somministrated - first_doses[t-delta] + arrival[t], first_doses[t+1-delta])
+                    vaccines[u][2][t] = stocks[t-1] - first_doses_somministrated - first_doses[t-delta] + arrival[t]
             else:
-                vaccines[u][2][t] = max(stocks[t-1]  - first_doses[t-delta]  + arrival[t], first_doses[t+1-delta])
+                vaccines[u][2][t] = stocks[t-1]  - first_doses[t-delta]  + arrival[t]
 
             index += 1
 
@@ -211,7 +209,7 @@ if __name__ == "__main__":
         for u in capacity:
 
             result = optimize_test_capacity_multiple_vaccines(len(b_list_0), b_list, DELTA, capacity[u])
-            heu_result = heuristic_v2(b_list, DELTA, capacity[u])
+            heu_result = heuristic_v2(b_list, capacity[u])
             
             # Variable to get the penality for the optimal solution
             second_doses_sum = 0
