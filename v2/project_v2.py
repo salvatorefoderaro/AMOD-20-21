@@ -13,7 +13,8 @@ CSV_OUTPUT_FOLDER = "csv_solution_v2"
 T = 180
 NUMBER_OF_ELEMENT = 30
 LIMIT_CAPACITY = 8
-INCREMENT = 0.2
+INCREMENT = 0.1
+LAST_DAY_VACCINES = False
 
 def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity):
 
@@ -215,8 +216,6 @@ def heuristic_v2(b_list, capacity):
                 else:
                     first_doses_somministrated = stocks[t-1] - first_doses[t-delta] + arrival[t]
 
-                first_doses_somministrated = int(first_doses_somministrated / 2)
-
                 if t-delta >= 0:
                     second_doses_somministrated = first_doses[t-delta]
                 else:
@@ -229,7 +228,6 @@ def heuristic_v2(b_list, capacity):
                         fraction_of_capacity = remain_capacity / (first_doses_somministrated + second_doses_somministrated)
                     else:
                         fraction_of_capacity = (first_doses_somministrated + second_doses_somministrated) / remain_capacity
-
 
                 if t-delta >= 0:
                     second_doses_somministrated = first_doses[t-delta]
@@ -251,6 +249,8 @@ def heuristic_v2(b_list, capacity):
 
                 first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * 0.33)
 
+                first_doses_somministrated = int(first_doses_somministrated / 2)
+
                 total_second_doses += first_doses_somministrated
                 object_function += (t+1+delta)*first_doses_somministrated
                 vaccines[u][1][t] = first_doses_somministrated
@@ -266,11 +266,23 @@ def heuristic_v2(b_list, capacity):
 
             index += 1
 
+    last_doses = 0
+
     sum_penality += vaccines["Pfizer"][2][180-1] 
     sum_penality += vaccines["Astrazeneca"][2][180-1] 
     sum_penality += vaccines["Moderna"][2][180-1]
 
-    return ([object_function/total_second_doses, sum_penality])
+    if LAST_DAY_VACCINES:
+        last_doses = 0
+        last_doses += (vaccines["Pfizer"][2][180-1]/2) * (180 + vaccines["Pfizer"][0])
+        last_doses += (vaccines["Astrazeneca"][2][180-1]/2) * (180 + vaccines["Astrazeneca"][0])
+        last_doses += (vaccines["Moderna"][2][180-1]/2) * (180 + vaccines["Moderna"][0])
+        sum_penality = 0
+
+    if LAST_DAY_VACCINES:
+        return ([ (object_function + last_doses) / (total_second_doses + (sum_penality/2)) , sum_penality])
+    else:
+        return ([ (object_function ) / (total_second_doses) , sum_penality])
 
 if __name__ == "__main__":
     
@@ -356,6 +368,7 @@ if __name__ == "__main__":
             # Variable to get the penality for the optimal solution
             second_doses_sum = 0
             penality_sum = 0
+            new_doses = 0
 
             for j in result[0]:
                 df["first_doses_" + j] = result[0][j]
@@ -363,15 +376,25 @@ if __name__ == "__main__":
                 df["stock_values_" + j] = result[2][j]
                 second_doses_sum += sum(result[1][j])
                 penality_sum += result[2][j][180-1]
+                if LAST_DAY_VACCINES:
+                    new_doses += (result[2][j][180-1]/2) * (180 + DELTA[j]) 
 
             # Build the capacity list to append at the end of the CSV file
             df["capacity"] = [capacity[u]] * 180
             
             # Calculate the optimal result and append to the CSV file
             solution_penality = 1000 * penality_sum
-            optimal_result_without_penality = (result[3] - solution_penality) / second_doses_sum
+            
+            if LAST_DAY_VACCINES:
+                optimal_result_without_penality = (result[3] - solution_penality + new_doses) / (second_doses_sum + penality_sum/2)
+            else:
+                optimal_result_without_penality = (result[3] - solution_penality) / (second_doses_sum)
             optimal_result[u].append( optimal_result_without_penality )
-            penality_optimal_result[u].append( penality_sum )
+
+            if LAST_DAY_VACCINES:
+                penality_optimal_result[u].append(0)
+            else:
+                penality_optimal_result[u].append( penality_sum )
 
             # Calculate the heuristic result
             heuristic_result[u].append( heu_result[0] )
@@ -468,7 +491,11 @@ if __name__ == "__main__":
         avg_stocks_risk_14.append(round( mean(penality_heuristic_risk_14[k] ), 2))
         avg_stocks_risk_21.append(round( mean(penality_heuristic_risk_21[k] ), 2))
 
-        avg_stocks_difference.append(round( (mean(penality_heuristic[k]) - mean(penality_optimal_result[k])) / mean(penality_heuristic[k]), 4))
+        if LAST_DAY_VACCINES:
+            avg_stocks_difference.append(0)
+        else:
+            avg_stocks_difference.append(round( (mean(penality_heuristic[k]) - mean(penality_optimal_result[k])) / mean(penality_heuristic[k]), 4))
+        
         avg_stocks_difference_risk.append(round( (mean(penality_heuristic_risk[k]) - mean(penality_optimal_result[k])) / mean(penality_heuristic_risk[k]), 4))
         avg_stocks_difference_risk_7.append(round( (mean(penality_heuristic_risk_7[k]) - mean(penality_optimal_result[k])) / mean(penality_heuristic_risk_7[k]), 4))
         avg_stocks_difference_risk_14.append(round( (mean(penality_heuristic_risk_14[k]) - mean(penality_optimal_result[k])) / mean(penality_heuristic_risk_14[k]), 4))
@@ -481,10 +508,10 @@ if __name__ == "__main__":
     df['Optimal value'] = avg_optimal_value
     
     df['Heuristic value'] = avg_heuristic_value
-    df['Heuristic risk value'] = avg_heuristic_risk_value
-    df['Heuristic 7 risk value'] = avg_heuristic_risk_value_7
-    df['Heuristic 14 risk value'] = avg_heuristic_risk_value_14
-    df['Heuristic 21 risk value'] = avg_heuristic_risk_value_21
+    df['Heuristic q-1 risk value'] = avg_heuristic_risk_value
+    df['Heuristic q-7 risk value'] = avg_heuristic_risk_value_7
+    df['Heuristic q-14 risk value'] = avg_heuristic_risk_value_14
+    df['Heuristic q-21 risk value'] = avg_heuristic_risk_value_21
     
     df['Result difference'] = avg_result_difference
     df['Heuristic q-1 risk difference'] = avg_result_difference_risk
@@ -505,5 +532,9 @@ if __name__ == "__main__":
     df['Stocks q-7 risk difference'] = avg_stocks_difference_risk_7
     df['Stocks q-14 risk difference'] = avg_stocks_difference_risk_14
     df['Stocks q-21 risk difference'] = avg_stocks_difference_risk_21
+    
+    if LAST_DAY_VACCINES:
+        df.to_csv("result_summary_v2_last_day_vaccines.csv", index = 0)
+    else:
+        df.to_csv("result_summary_v2.csv", index = 0)
 
-    df.to_csv("result_summary_v2.csv", index = 0)
