@@ -11,10 +11,10 @@ DELTA = {'Pfizer': 21, 'Moderna': 28, 'Astrazeneca': 78}
 CSV_INPUT_FOLDER = "input_csv"
 CSV_OUTPUT_FOLDER = "csv_solution_v2"
 T = 180
-NUMBER_OF_ELEMENT = 30
+NUMBER_OF_ELEMENT = 1000
 LIMIT_CAPACITY = 8
-INCREMENT = 0.1
-LAST_DAY_VACCINES = False
+INCREMENT = 1
+LAST_DAY_VACCINES = True
 
 def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity):
 
@@ -452,10 +452,10 @@ if __name__ == "__main__":
 
     for k in optimal_result:
         df[k + " - optimal solution"] = optimal_result[k]
-        df[k + " - optimal remain stocks"] = penality_optimal_result[k]
+        df[k + " - optimal solution remain stocks"] = penality_optimal_result[k]
 
-        df[k + " - heuristic solution"] = heuristic_result[k]
-        df[k + " - heuristic remain stocks"] = penality_heuristic[k]
+        df[k + " - conservative heuristic solution"] = heuristic_result[k]
+        df[k + " - conservative heuristic remain stocks"] = penality_heuristic[k]
 
         df[k + " - heuristic q-1 risk solution"] = heuristic_risk_result[k]
         df[k + " - heuristic q-1 risk remain stocks"] = penality_heuristic_risk[k]
@@ -478,12 +478,6 @@ if __name__ == "__main__":
         avg_heuristic_risk_value_14.append(round( mean(heuristic_risk_result_14[k] ), 2))
         avg_heuristic_risk_value_21.append(round( mean(heuristic_risk_result_21[k] ), 2))
 
-        avg_result_difference.append(round( (mean(heuristic_result[k]) - mean(optimal_result[k])) / mean(heuristic_result[k]), 4))
-        avg_result_difference_risk.append(round( (mean(heuristic_risk_result[k]) - mean(optimal_result[k])) / mean(heuristic_risk_result[k]), 4))
-        avg_result_difference_risk_7.append(round( (mean(heuristic_risk_result_7[k]) - mean(optimal_result[k])) / mean(heuristic_risk_result_7[k]), 4))
-        avg_result_difference_risk_14.append(round( (mean(heuristic_risk_result_14[k]) - mean(optimal_result[k])) / mean(heuristic_risk_result_14[k]), 4))
-        avg_result_difference_risk_21.append(round( (mean(heuristic_risk_result_21[k]) - mean(optimal_result[k])) / mean(heuristic_risk_result_21[k]), 4))
-
         avg_stocks_optimal.append(round( mean(penality_optimal_result[k] ), 2))
         avg_stocks_heuristic.append(round( mean(penality_heuristic[k] ), 2))
         avg_stocks_risk.append(round( mean(penality_heuristic_risk[k] ), 2))
@@ -491,47 +485,26 @@ if __name__ == "__main__":
         avg_stocks_risk_14.append(round( mean(penality_heuristic_risk_14[k] ), 2))
         avg_stocks_risk_21.append(round( mean(penality_heuristic_risk_21[k] ), 2))
 
-        if LAST_DAY_VACCINES:
-            avg_stocks_difference.append(0)
-        else:
-            avg_stocks_difference.append(round( (mean(penality_heuristic[k]) - mean(penality_optimal_result[k])) / mean(penality_heuristic[k]), 4))
-        
-        avg_stocks_difference_risk.append(round( (mean(penality_heuristic_risk[k]) - mean(penality_optimal_result[k])) / mean(penality_heuristic_risk[k]), 4))
-        avg_stocks_difference_risk_7.append(round( (mean(penality_heuristic_risk_7[k]) - mean(penality_optimal_result[k])) / mean(penality_heuristic_risk_7[k]), 4))
-        avg_stocks_difference_risk_14.append(round( (mean(penality_heuristic_risk_14[k]) - mean(penality_optimal_result[k])) / mean(penality_heuristic_risk_14[k]), 4))
-        avg_stocks_difference_risk_21.append(round( (mean(penality_heuristic_risk_21[k]) - mean(penality_optimal_result[k])) / mean(penality_heuristic_risk_21[k]), 4))
-
     df.to_csv("result_v2.csv", index=0)
 
     df = pd.DataFrame(capacity_list, columns= ['Capacity'])
 
-    df['Optimal value'] = avg_optimal_value
+    df['Optimal solution'] = avg_optimal_value
     
-    df['Heuristic value'] = avg_heuristic_value
-    df['Heuristic q-1 risk value'] = avg_heuristic_risk_value
-    df['Heuristic q-7 risk value'] = avg_heuristic_risk_value_7
-    df['Heuristic q-14 risk value'] = avg_heuristic_risk_value_14
-    df['Heuristic q-21 risk value'] = avg_heuristic_risk_value_21
+    df['Conservative heuristic'] = avg_heuristic_value
+    df['Heuristic q-1 risk'] = avg_heuristic_risk_value
+    df['Heuristic q-7 risk'] = avg_heuristic_risk_value_7
+    df['Heuristic q-14 risk'] = avg_heuristic_risk_value_14
+    df['Heuristic q-21 risk'] = avg_heuristic_risk_value_21
     
-    df['Result difference'] = avg_result_difference
-    df['Heuristic q-1 risk difference'] = avg_result_difference_risk
-    df['Heuristic q-7 risk difference'] = avg_result_difference_risk_7
-    df['Heuristic q-14 risk difference'] = avg_result_difference_risk_14
-    df['Heuristic q-21 risk difference'] = avg_result_difference_risk_21
+    df['Optimal solution'] = avg_stocks_optimal
+    
+    df['Conservative heuristic'] = avg_stocks_heuristic
+    df['Heuristic q-1 risk'] = avg_stocks_risk
+    df['Heuristic q-7 risk'] = avg_stocks_risk_7
+    df['Heuristic q-14 risk'] = avg_stocks_risk_14
+    df['Heuristic q-21 risk'] = avg_stocks_risk_21
 
-    df['Optimal rem. stocks'] = avg_stocks_optimal
-    
-    df['Heuristic rem. stocks'] = avg_stocks_heuristic
-    df['Heuristic q-1 risk rem.'] = avg_stocks_risk
-    df['Heuristic q-7 risk rem.'] = avg_stocks_risk_7
-    df['Heuristic q-14 risk rem.'] = avg_stocks_risk_14
-    df['Heuristic q-21 ris rem. stocks'] = avg_stocks_risk_21
-
-    df['Stocks difference'] = avg_stocks_difference
-    df['Stocks q-1 risk difference'] = avg_stocks_difference_risk
-    df['Stocks q-7 risk difference'] = avg_stocks_difference_risk_7
-    df['Stocks q-14 risk difference'] = avg_stocks_difference_risk_14
-    df['Stocks q-21 risk difference'] = avg_stocks_difference_risk_21
     
     if LAST_DAY_VACCINES:
         df.to_csv("result_summary_v2_last_day_vaccines.csv", index = 0)

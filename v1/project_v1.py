@@ -10,7 +10,7 @@ PRINT = False
 DELTA = 21
 CSV_INPUT_FOLDER = "input_csv"
 CSV_OUTPUT_FOLDER = "csv_solution_v1"
-STEP = 10
+STEP = 5
 
 def get_column_from_df(df, column_name):
     return df[column_name].values.tolist()
