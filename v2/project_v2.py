@@ -11,7 +11,7 @@ DELTA = {'Pfizer': 21, 'Moderna': 28, 'Astrazeneca': 78}
 CSV_INPUT_FOLDER = "input_csv"
 CSV_OUTPUT_FOLDER = "csv_solution_v2"
 T = 180
-NUMBER_OF_ELEMENT = 1000
+NUMBER_OF_ELEMENT = 30
 LIMIT_CAPACITY = 8
 INCREMENT = 0.2
 
@@ -130,28 +130,38 @@ def heuristic_v2_risk(b_list, capacity, l):
                 if first_doses_somministrated < 0:
                     first_doses_somministrated = 0
 
-                if first_doses_somministrated == 0:
+                if t-delta >= 0:
+                    second_doses_somministrated = first_doses[t-delta]
+                else:
+                    second_doses_somministrated = 0
+
+                if first_doses_somministrated == 0 and second_doses_somministrated == 0:
                     fraction_of_capacity = 0
                 else:
-                    if first_doses_somministrated / remain_capacity > 1:
-                        fraction_of_capacity = remain_capacity / first_doses_somministrated
+                    if (first_doses_somministrated + second_doses_somministrated) / remain_capacity > 1:
+                        fraction_of_capacity = remain_capacity / (first_doses_somministrated + second_doses_somministrated)
                     else:
-                        fraction_of_capacity = first_doses_somministrated / remain_capacity
+                        fraction_of_capacity = (first_doses_somministrated + second_doses_somministrated) / remain_capacity
 
-                if index == 0:
+                if t-delta >= 0:
+                    second_doses_somministrated = first_doses[t-delta]
+                else:
+                    second_doses_somministrated = 0
+
+                '''if index == 0:
                     if (fraction_of_capacity > 0.33):
-                        first_doses_somministrated = min(first_doses_somministrated, capacity * 0.33)
+                        first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * 0.33)
                     else:
-                        first_doses_somministrated = min(first_doses_somministrated, capacity * fraction_of_capacity)
+                        first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * fraction_of_capacity)
                 elif index == 1:
                     if (fraction_of_capacity > 0.5):
-                        first_doses_somministrated = min(first_doses_somministrated, capacity * 0.5)
+                        first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * 0.5)
                     else:
-                        first_doses_somministrated = min(first_doses_somministrated, capacity * fraction_of_capacity)
+                        first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * fraction_of_capacity)
                 elif index == 2:
-                    first_doses_somministrated = min(first_doses_somministrated, remain_capacity)
-                
-                # first_doses_somministrated = min(first_doses_somministrated, capacity * 0.33)
+                    first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, remain_capacity)'''
+
+                first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * 0.33)
 
                 total_second_doses += first_doses_somministrated
                 object_function += (t+1+delta)*first_doses_somministrated
@@ -207,28 +217,39 @@ def heuristic_v2(b_list, capacity):
 
                 first_doses_somministrated = int(first_doses_somministrated / 2)
 
-                if first_doses_somministrated == 0:
+                if t-delta >= 0:
+                    second_doses_somministrated = first_doses[t-delta]
+                else:
+                    second_doses_somministrated = 0
+
+                if first_doses_somministrated == 0 and second_doses_somministrated == 0:
                     fraction_of_capacity = 0
                 else:
-                    if first_doses_somministrated / remain_capacity > 1:
-                        fraction_of_capacity = remain_capacity / first_doses_somministrated
+                    if (first_doses_somministrated + second_doses_somministrated) / remain_capacity > 1:
+                        fraction_of_capacity = remain_capacity / (first_doses_somministrated + second_doses_somministrated)
                     else:
-                        fraction_of_capacity = first_doses_somministrated / remain_capacity
+                        fraction_of_capacity = (first_doses_somministrated + second_doses_somministrated) / remain_capacity
+
+
+                if t-delta >= 0:
+                    second_doses_somministrated = first_doses[t-delta]
+                else:
+                    second_doses_somministrated = 0
                 
-                if index == 0:
+                '''if index == 0:
                     if (fraction_of_capacity > 0.33):
-                        first_doses_somministrated = min(first_doses_somministrated, capacity * 0.33)
+                        first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * 0.33)
                     else:
-                        first_doses_somministrated = min(first_doses_somministrated, capacity * fraction_of_capacity)
+                        first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * fraction_of_capacity)
                 elif index == 1:
                     if (fraction_of_capacity > 0.5):
-                        first_doses_somministrated = min(first_doses_somministrated, capacity * 0.5)
+                        first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * 0.5)
                     else:
-                        first_doses_somministrated = min(first_doses_somministrated, capacity * fraction_of_capacity)
+                        first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * fraction_of_capacity)
                 elif index == 2:
-                    first_doses_somministrated = min(first_doses_somministrated, remain_capacity)
+                    first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, remain_capacity)'''
 
-                # first_doses_somministrated = min(first_doses_somministrated, capacity * 0.33)
+                first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * 0.33)
 
                 total_second_doses += first_doses_somministrated
                 object_function += (t+1+delta)*first_doses_somministrated
