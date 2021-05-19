@@ -5,6 +5,8 @@ import numpy as np
 import os
 from pathlib import Path
 from statistics import mean
+import sys
+import shutil
 
 PRINT = False
 DELTA = {'Pfizer': 21, 'Moderna': 28, 'Astrazeneca': 78}
@@ -149,7 +151,7 @@ def heuristic_v2_risk(b_list, capacity, l):
                 else:
                     second_doses_somministrated = 0
 
-                '''if index == 0:
+                if index == 0:
                     if (fraction_of_capacity > 0.33):
                         first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * 0.33)
                     else:
@@ -160,9 +162,9 @@ def heuristic_v2_risk(b_list, capacity, l):
                     else:
                         first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * fraction_of_capacity)
                 elif index == 2:
-                    first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, remain_capacity)'''
+                    first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, remain_capacity)
 
-                first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * 0.33)
+                # first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * 0.33)
 
                 total_second_doses += first_doses_somministrated
                 object_function += (t+1+delta)*first_doses_somministrated
@@ -216,6 +218,8 @@ def heuristic_v2(b_list, capacity):
                 else:
                     first_doses_somministrated = stocks[t-1] - first_doses[t-delta] + arrival[t]
 
+                first_doses_somministrated = int(first_doses_somministrated / 2)
+
                 if t-delta >= 0:
                     second_doses_somministrated = first_doses[t-delta]
                 else:
@@ -234,7 +238,7 @@ def heuristic_v2(b_list, capacity):
                 else:
                     second_doses_somministrated = 0
                 
-                '''if index == 0:
+                if index == 0:
                     if (fraction_of_capacity > 0.33):
                         first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * 0.33)
                     else:
@@ -245,11 +249,9 @@ def heuristic_v2(b_list, capacity):
                     else:
                         first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * fraction_of_capacity)
                 elif index == 2:
-                    first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, remain_capacity)'''
-
-                first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * 0.33)
-
-                first_doses_somministrated = int(first_doses_somministrated / 2)
+                    first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, remain_capacity)
+    
+                # first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * 0.33)
 
                 total_second_doses += first_doses_somministrated
                 object_function += (t+1+delta)*first_doses_somministrated
@@ -285,6 +287,19 @@ def heuristic_v2(b_list, capacity):
         return ([ (object_function ) / (total_second_doses) , sum_penality])
 
 if __name__ == "__main__":
+
+    shutil.rmtree("csv_solution_v2")
+    os.mkdir("csv_solution_v2")
+
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "True":
+            LAST_DAY_VACCINES = True
+            INCREMENT = float(sys.argv[2])
+            NUMBER_OF_ELEMENT = int(sys.argv[3])
+        else:
+            LAST_DAY_VACCINES = False
+            INCREMENT = float(sys.argv[2])
+            NUMBER_OF_ELEMENT = int(sys.argv[3])
     
     penality_optimal_result = {}
     optimal_result = {}
@@ -302,7 +317,7 @@ if __name__ == "__main__":
     penality_heuristic_risk_21 = {}
 
     num = 1
-    while(num < LIMIT_CAPACITY):
+    while(num < (LIMIT_CAPACITY)):
         penality_optimal_result[str(num) + " c"] = []
         optimal_result[str(num) + " c"] = []
         
@@ -497,17 +512,17 @@ if __name__ == "__main__":
     df['Heuristic q-14 risk'] = avg_heuristic_risk_value_14
     df['Heuristic q-21 risk'] = avg_heuristic_risk_value_21
     
-    df['Optimal solution'] = avg_stocks_optimal
+    df['Optimal solution stocks'] = avg_stocks_optimal
     
-    df['Conservative heuristic'] = avg_stocks_heuristic
-    df['Heuristic q-1 risk'] = avg_stocks_risk
-    df['Heuristic q-7 risk'] = avg_stocks_risk_7
-    df['Heuristic q-14 risk'] = avg_stocks_risk_14
-    df['Heuristic q-21 risk'] = avg_stocks_risk_21
+    df['Conservative heuristic stocks'] = avg_stocks_heuristic
+    df['Heuristic q-1 risk stocks'] = avg_stocks_risk
+    df['Heuristic q-7 risk stocks'] = avg_stocks_risk_7
+    df['Heuristic q-14 risk stocks'] = avg_stocks_risk_14
+    df['Heuristic q-21 risk stocks'] = avg_stocks_risk_21
 
     
     if LAST_DAY_VACCINES:
-        df.to_csv("result_summary_v2_last_day_vaccines.csv", index = 0)
+        df.to_csv("result_summary_v2_zero_stocks.csv", index = 0)
     else:
         df.to_csv("result_summary_v2.csv", index = 0)
 
