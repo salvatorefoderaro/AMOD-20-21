@@ -13,10 +13,10 @@ DELTA = {'Pfizer': 21, 'Moderna': 28, 'Astrazeneca': 78}
 CSV_INPUT_FOLDER = "input_csv"
 CSV_OUTPUT_FOLDER = "csv_solution_v2"
 T = 180
-NUMBER_OF_ELEMENT = 1000
-LIMIT_CAPACITY = 8
-INCREMENT = 1
-LAST_DAY_VACCINES = True
+NUMBER_OF_ELEMENT = 50
+LIMIT_CAPACITY = 10
+INCREMENT = 0.5
+LAST_DAY_VACCINES = False
 
 def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity):
 
@@ -51,8 +51,6 @@ def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity):
     m.addConstrs( (first_doses[j,i]  + 0 + stocks[j,i] == B[j,i] + 0 for j, i in combinations if i == 0))
     m.addConstrs( (first_doses[j,i] + 0 + stocks[j,i] == B[j,i] + stocks[j,i-1] for j, i in combinations if i >= 1 and i < Delta[j]))
     m.addConstrs( (first_doses[j,i] + first_doses[j,i-Delta[j]] + stocks[j,i] == B[j,i] + stocks[j, i-1] for j, i in combinations if i >= 1 and i >= Delta[j]))
-
-    # m.addConstrs( (stocks[j,i] <= 1000000  for j, i in combinations if i == T-1 ) )
 
     m.setObjective((second_doses.prod(time_frame) + 1000 * ( stocks['Pfizer', T-1] + stocks['Moderna', T-1] + stocks['Astrazeneca', T-1])), GRB.MINIMIZE)
 
@@ -92,30 +90,32 @@ def add_column_to_df(df, values_list, new_column_name):
     df[new_column_name] = values_list
     return df
 
-def heuristic_v2_sum(first_doses_list, delta, t, l):
+def heuristic_v2_sum(first_doses_list, delta, t, q):
     value_sum = 0
 
-    for i in range(1, l+1):
+    for i in range(1, q+1):
         if t + i - delta >= 0 and t + i - delta <= 180:
             value_sum += first_doses_list[t + i - delta]
     return value_sum
 
-def heuristic_v2_risk(b_list, capacity, l):
+def heuristic_v2_risk(b_list, capacity, q):
 
     vaccines = { "Pfizer": [21, [0]*180, [0]*180], "Moderna": [28, [0]*180, [0]*180], "Astrazeneca": [78, [0]*180, [0]*180] }
-    stocks = []
-
+    total_arrival = {"Pfizer": sum(b_list["Pfizer"]), "Moderna": sum(b_list["Moderna"]), "Astrazeneca": sum(b_list["Astrazeneca"])   }
+    doses_somministrated = {"Pfizer": 0, "Moderna": 0, "Astrazeneca": 0}
+    
     object_function = 0 
     total_second_doses = 0
     index = 0
     sum_penality = 0
 
     for t in range(0, 180):
-        
         index = 0
         remain_capacity = capacity
         for u in vaccines:
-            
+
+            first_doses_somministrated = 0
+            second_doses_somministrated = 0
             delta = vaccines[u][0]
             first_doses = vaccines[u][1]
             stocks = vaccines[u][2]
@@ -128,7 +128,7 @@ def heuristic_v2_risk(b_list, capacity, l):
                 elif t-delta < 0:
                     first_doses_somministrated = stocks[t-1] + arrival[t]
                 else:
-                    first_doses_somministrated = stocks[t-1] - first_doses[t-delta] - heuristic_v2_sum(first_doses, delta, t, l) + arrival[t]
+                    first_doses_somministrated = stocks[t-1] - first_doses[t-delta] - heuristic_v2_sum(first_doses, delta, t, q) + arrival[t]
 
                 if first_doses_somministrated < 0:
                     first_doses_somministrated = 0
@@ -138,39 +138,12 @@ def heuristic_v2_risk(b_list, capacity, l):
                 else:
                     second_doses_somministrated = 0
 
-                if first_doses_somministrated == 0 and second_doses_somministrated == 0:
-                    fraction_of_capacity = 0
-                else:
-                    if (first_doses_somministrated + second_doses_somministrated) / remain_capacity > 1:
-                        fraction_of_capacity = remain_capacity / (first_doses_somministrated + second_doses_somministrated)
-                    else:
-                        fraction_of_capacity = (first_doses_somministrated + second_doses_somministrated) / remain_capacity
+                first_doses_somministrated = min(first_doses_somministrated , (capacity * 0.33) - second_doses_somministrated)
 
-                if t-delta >= 0:
-                    second_doses_somministrated = first_doses[t-delta]
-                else:
-                    second_doses_somministrated = 0
-
-                if index == 0:
-                    if (fraction_of_capacity > 0.33):
-                        first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * 0.33)
-                    else:
-                        first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * fraction_of_capacity)
-                elif index == 1:
-                    if (fraction_of_capacity > 0.5):
-                        first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * 0.5)
-                    else:
-                        first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * fraction_of_capacity)
-                elif index == 2:
-                    first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, remain_capacity)
-
-                # first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * 0.33)
-
-                total_second_doses += first_doses_somministrated
                 object_function += (t+1+delta)*first_doses_somministrated
+                doses_somministrated[u] += first_doses_somministrated
                 vaccines[u][1][t] = first_doses_somministrated
-                remain_capacity -= first_doses_somministrated
-                
+
                 if t == 0:
                     vaccines[u][2][t] = - first_doses_somministrated  + arrival[t]
                 elif t - delta < 0:
@@ -180,18 +153,37 @@ def heuristic_v2_risk(b_list, capacity, l):
             else:
                 vaccines[u][2][t] = stocks[t-1]  - first_doses[t-delta]  + arrival[t]
 
-            index += 1
+    total_dose_somministrated =  0
+    total_dose_somministrated += doses_somministrated["Pfizer"] * 2
+    total_dose_somministrated += doses_somministrated["Astrazeneca"] * 2
+    total_dose_somministrated += doses_somministrated["Moderna"] * 2
 
-    sum_penality += vaccines["Pfizer"][2][180-1] 
-    sum_penality += vaccines["Astrazeneca"][2][180-1] 
-    sum_penality += vaccines["Moderna"][2][180-1]
+    stocks_at_end = 0
+    stocks_at_end += total_arrival["Pfizer"] - doses_somministrated["Pfizer"] * 2
+    stocks_at_end += total_arrival["Moderna"] - doses_somministrated["Moderna"] * 2
+    stocks_at_end += total_arrival["Astrazeneca"] - doses_somministrated["Astrazeneca"] * 2
 
-    return ([object_function/total_second_doses, sum_penality])
+    if stocks_at_end - (vaccines["Astrazeneca"][2][179] +  vaccines["Pfizer"][2][179] +  vaccines["Moderna"][2][179]) > 100:
+        print("Errore")
+        input()
+
+    if LAST_DAY_VACCINES:
+
+        object_function += (total_arrival["Pfizer"] - doses_somministrated["Pfizer"] * 2) * (180+21)
+        object_function += (total_arrival["Moderna"] - doses_somministrated["Moderna"] * 2) * (180+28)
+        object_function += (total_arrival["Astrazeneca"] - doses_somministrated["Astrazeneca"] * 2) * (180+78)
+        return [ (object_function ) / ((total_dose_somministrated + stocks_at_end)/2) , 0]
+
+    else:
+        return [ (object_function ) / (total_dose_somministrated) , stocks_at_end]
+
 
 def heuristic_v2(b_list, capacity):
 
     vaccines = { "Pfizer": [21, [0]*180, [0]*180], "Moderna": [28, [0]*180, [0]*180], "Astrazeneca": [78, [0]*180, [0]*180] }
     stocks = []
+    total_arrival = {"Pfizer": sum(b_list["Pfizer"]), "Moderna": sum(b_list["Moderna"]), "Astrazeneca": sum(b_list["Astrazeneca"])   }
+    doses_somministrated = {"Pfizer": 0, "Moderna": 0, "Astrazeneca": 0}
 
     object_function = 0 
     total_second_doses = 0
@@ -224,67 +216,46 @@ def heuristic_v2(b_list, capacity):
                     second_doses_somministrated = first_doses[t-delta]
                 else:
                     second_doses_somministrated = 0
-
-                if first_doses_somministrated == 0 and second_doses_somministrated == 0:
-                    fraction_of_capacity = 0
-                else:
-                    if (first_doses_somministrated + second_doses_somministrated) / remain_capacity > 1:
-                        fraction_of_capacity = remain_capacity / (first_doses_somministrated + second_doses_somministrated)
-                    else:
-                        fraction_of_capacity = (first_doses_somministrated + second_doses_somministrated) / remain_capacity
-
-                if t-delta >= 0:
-                    second_doses_somministrated = first_doses[t-delta]
-                else:
-                    second_doses_somministrated = 0
-                
-                if index == 0:
-                    if (fraction_of_capacity > 0.33):
-                        first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * 0.33)
-                    else:
-                        first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * fraction_of_capacity)
-                elif index == 1:
-                    if (fraction_of_capacity > 0.5):
-                        first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * 0.5)
-                    else:
-                        first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * fraction_of_capacity)
-                elif index == 2:
-                    first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, remain_capacity)
     
-                # first_doses_somministrated = min(first_doses_somministrated + second_doses_somministrated, capacity * 0.33)
+                first_doses_somministrated = min(first_doses_somministrated, (capacity * 0.33) - second_doses_somministrated)
 
                 total_second_doses += first_doses_somministrated
                 object_function += (t+1+delta)*first_doses_somministrated
                 vaccines[u][1][t] = first_doses_somministrated
-                remain_capacity -= first_doses_somministrated                
-
+                doses_somministrated[u] += first_doses_somministrated
+            
                 if t == 0:
-                    vaccines[u][2][t] = - first_doses_somministrated - first_doses_somministrated + arrival[t]
+                    vaccines[u][2][t] = - first_doses_somministrated  + arrival[t]
+                elif t - delta < 0:
+                    vaccines[u][2][t] = stocks[t-1] - first_doses_somministrated + arrival[t]
                 else:
-                    vaccines[u][2][t] = stocks[t-1] - first_doses_somministrated - first_doses_somministrated  + arrival[t]
-
+                    vaccines[u][2][t] = stocks[t-1] - first_doses_somministrated - first_doses[t-delta] + arrival[t]
             else:
-                vaccines[u][2][t] = stocks[t-1] + arrival[t]
+                vaccines[u][2][t] = stocks[t-1]  - first_doses[t-delta]  + arrival[t]
 
-            index += 1
+    total_dose_somministrated =  0
+    total_dose_somministrated += doses_somministrated["Pfizer"] * 2
+    total_dose_somministrated += doses_somministrated["Astrazeneca"] * 2
+    total_dose_somministrated += doses_somministrated["Moderna"] * 2
 
-    last_doses = 0
+    stocks_at_end = 0
+    stocks_at_end += total_arrival["Pfizer"] - doses_somministrated["Pfizer"] * 2
+    stocks_at_end += total_arrival["Moderna"] - doses_somministrated["Moderna"] * 2
+    stocks_at_end += total_arrival["Astrazeneca"] - doses_somministrated["Astrazeneca"] * 2
 
-    sum_penality += vaccines["Pfizer"][2][180-1] 
-    sum_penality += vaccines["Astrazeneca"][2][180-1] 
-    sum_penality += vaccines["Moderna"][2][180-1]
+    if stocks_at_end - (vaccines["Astrazeneca"][2][179] +  vaccines["Pfizer"][2][179] +  vaccines["Moderna"][2][179]) > 100:
+        print("Errore")
+        input()
 
     if LAST_DAY_VACCINES:
-        last_doses = 0
-        last_doses += (vaccines["Pfizer"][2][180-1]/2) * (180 + vaccines["Pfizer"][0])
-        last_doses += (vaccines["Astrazeneca"][2][180-1]/2) * (180 + vaccines["Astrazeneca"][0])
-        last_doses += (vaccines["Moderna"][2][180-1]/2) * (180 + vaccines["Moderna"][0])
-        sum_penality = 0
 
-    if LAST_DAY_VACCINES:
-        return ([ (object_function + last_doses) / (total_second_doses + (sum_penality/2)) , sum_penality])
+        object_function += (total_arrival["Pfizer"] - doses_somministrated["Pfizer"] * 2) * (180+21)
+        object_function += (total_arrival["Moderna"] - doses_somministrated["Moderna"] * 2) * (180+28)
+        object_function += (total_arrival["Astrazeneca"] - doses_somministrated["Astrazeneca"] * 2) * (180+78)
+        return [ (object_function ) / ((total_dose_somministrated + stocks_at_end)/2) , 0]
+    
     else:
-        return ([ (object_function ) / (total_second_doses) , sum_penality])
+        return [ (object_function ) / (total_dose_somministrated) , stocks_at_end]
 
 if __name__ == "__main__":
 
@@ -404,6 +375,7 @@ if __name__ == "__main__":
                 optimal_result_without_penality = (result[3] - solution_penality + new_doses) / (second_doses_sum + penality_sum/2)
             else:
                 optimal_result_without_penality = (result[3] - solution_penality) / (second_doses_sum)
+
             optimal_result[u].append( optimal_result_without_penality )
 
             if LAST_DAY_VACCINES:

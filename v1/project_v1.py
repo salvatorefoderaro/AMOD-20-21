@@ -10,7 +10,7 @@ PRINT = False
 DELTA = 21
 CSV_INPUT_FOLDER = "input_csv"
 CSV_OUTPUT_FOLDER = "csv_solution_v1"
-STEP = 5
+STEP = 20
 
 def get_column_from_df(df, column_name):
     return df[column_name].values.tolist()
@@ -101,45 +101,50 @@ def optimal_solution(T, B, Delta):
 
 def heuristic(T, B, Delta):
     
-    x = [0.01]*(T+1)
-    y = [0.0]*(T+1)
-    s = [0.0] + B[:]
-    B = [0.0] + B
+    x = [0]*T
+    y = [0]*T
+    s = [0]*T
+    for i in range(0, T):
+        s[i] = sum(B[:i+1])    
 
     object_function_value = 0
 
-    x[T-Delta] = int(sum(B)/2)
-    y[T] = x[T-Delta]
+    x[T-Delta-1] = int(sum(B)/2)
+    y[T-1] = x[T-Delta-1]
     
-    s[T] = 0
-    s[T-1] = int(sum(B)/2) - B[T]
-    s[T-Delta] = int(sum(B[:T-Delta+1])) - x[T-Delta]
+    s[T-1] = 0
+    s[T-Delta-1] = s[T-Delta-1] - x[T-Delta-1]
 
-    t = T-Delta
+    t = T-Delta-1
 
-    while(t > 2):
-        lista = []
-        if x[t] != 0.01:
-            lista.append(x[t])
-        lista.append(s[t+Delta-1])
-        lista.append(B[t-1])
+    while(t > 1):
+        c = min(s[t+Delta-1], x[t], sum(B[:t]))
 
-        c = min(lista)
+        ''' print("c is: " + str(c))
+        print("x[t-1] is: " + str(x[t-1]))
+        print("y[t+Delta-1] is: " + str(y[t+Delta-1]))
+
+        print("x[t] is: " + str(x[t]))
+        print("y[t+Delta] is: " + str(y[t+Delta]))
+        print("s[t-1] is: " + str(s[t-1]))
+        print("s[t+Delta-1] is: " + str(s[t+Delta-1]))'''
         
-        x[t-1] = int(x[t-1]) + c
-        y[t+Delta-1] = int(y[t+Delta-1]) + c
+        x[t-1] += c
+        y[t+Delta-1] += c
         
-        x[t] = int(x[t]) - c
-        y[t+Delta] = int(y[t+Delta]) - c
-        s[t-1] = int(s[t-1]) - c
-        s[t+Delta-1] = int(s[t+Delta-1]) -c
+        x[t] -=  c
+        y[t+Delta] -= c
+        s[t-1] -= c
+        s[t+Delta-1] -= c
        
         t -= 1
 
     for j in range(0, len(y)):
-        object_function_value += y[j] * (j)
+        object_function_value += y[j] * (j+1)
 
-    return [object_function_value, y]
+    object_function_value += (s[t-1]/2) * (180+Delta)
+
+    return [object_function_value , y]
     
 if __name__ == "__main__":
     
@@ -174,7 +179,7 @@ if __name__ == "__main__":
         avg_optimal.append(round( mean(optimal_result[j:j+STEP]), 4))
 
     df = pd.DataFrame(instances, columns= ['instance'])
-    df['optimal_value'] = avg_optimal
-    df['heuristic_value'] = avg_heuristic
+    df['LP Model value'] = avg_optimal
+    df['Heuristic'] = avg_heuristic
 
     df.to_csv("result_v1.csv", index=0)
