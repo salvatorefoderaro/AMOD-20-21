@@ -10,7 +10,7 @@ PRINT = False
 DELTA = 21
 CSV_INPUT_FOLDER = "input_csv"
 CSV_OUTPUT_FOLDER = "csv_solution_v1"
-STEP = 20
+STEP = 1
 
 def get_column_from_df(df, column_name):
     return df[column_name].values.tolist()
@@ -70,7 +70,7 @@ def optimal_solution(T, B, Delta):
 
     # Set the object function
 
-    m.setObjective((second_doses.prod(time)), GRB.MINIMIZE)
+    m.setObjective( gp.quicksum(second_doses[i] * (i+1) for i in time_slot), GRB.MINIMIZE)
 
     # print ("\n\n***** Optimize log *****\n\n")
 
@@ -104,30 +104,26 @@ def heuristic(T, B, Delta):
     x = [0]*T
     y = [0]*T
     s = [0]*T
-    for i in range(0, T):
-        s[i] = sum(B[:i+1])    
-
-    object_function_value = 0
 
     x[T-Delta-1] = int(sum(B)/2)
     y[T-1] = x[T-Delta-1]
-    
+
     s[T-1] = 0
-    s[T-Delta-1] = s[T-Delta-1] - x[T-Delta-1]
+
+    for i in range(0, T):
+        if i < T-Delta-1:
+            s[i] = sum(B[:i+1])    
+        elif i >= T-Delta-1:
+            s[i] = sum(B[:i+1]) - x[T-Delta-1]
+
+    s[T-1] = 0
+    s[T-2] = x[T-Delta-1] - B[T-1]
+    object_function_value = 0
 
     t = T-Delta-1
 
-    while(t > 1):
+    while(t > -1):
         c = min(s[t+Delta-1], x[t], sum(B[:t]))
-
-        ''' print("c is: " + str(c))
-        print("x[t-1] is: " + str(x[t-1]))
-        print("y[t+Delta-1] is: " + str(y[t+Delta-1]))
-
-        print("x[t] is: " + str(x[t]))
-        print("y[t+Delta] is: " + str(y[t+Delta]))
-        print("s[t-1] is: " + str(s[t-1]))
-        print("s[t+Delta-1] is: " + str(s[t+Delta-1]))'''
         
         x[t-1] += c
         y[t+Delta-1] += c
@@ -139,10 +135,8 @@ def heuristic(T, B, Delta):
        
         t -= 1
 
-    for j in range(0, len(y)):
-        object_function_value += y[j] * (j+1)
-
-    object_function_value += (s[t-1]/2) * (180+Delta)
+    for j in range(0, len(x)):
+        object_function_value += x[j] * (Delta+j+1)
 
     return [object_function_value , y]
     
