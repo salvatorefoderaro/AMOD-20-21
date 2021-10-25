@@ -50,26 +50,26 @@ def optimize_test_capacity_multiple_vaccines(T, B, real_B, time_delta, Delta, Ca
     m.addConstrs( (first_doses.sum('*',j) + second_doses.sum('*', j)) <= Capacity for j in range(start_time, T))
 
     m.addConstrs( (first_doses[j, i] == second_doses[j,i+Delta[j]] for j, i in combinations if i < T-Delta[j] ))
+
     m.addConstrs( (first_doses[j, i] == 0 for j, i in combinations if i >= T-Delta[j] ))
+
     m.addConstrs( (first_doses[j, i] == planned_first_doses[j][i] for j, i in combinations if i < start_time ))
 
     m.addConstrs( second_doses[j,i] == 0 for j, i in combinations if i < Delta[j])
 
-    # m.addConstrs( stocks[j,i-1] == remain_stocks[j][i-1] for j, i in combinations if i > 0 and i == start_time)
-
     # real_B list
     m.addConstrs( (first_doses[j,i] + 0 + stocks[j,i] == real_B[j,i] + 0 for j, i in combinations if i == 0 and i < start_time + time_delta))
-    m.addConstrs( (first_doses[j,i] + second_doses[j,i] + stocks[j,i] == real_B[j,i] + stocks[j,i-1] for j, i in combinations if i >= 1 and i < start_time + time_delta))    
-    
-    m.addConstrs( (first_doses[j,i] + 0 + stocks[j,i] == real_B[j,i] + 0 for j, i in combinations if i == 0 and i == start_time and i < start_time + time_delta))
-    m.addConstrs( (first_doses[j,i] + second_doses[j,i] + stocks[j,i] == real_B[j,i] + remain_stocks[j][i-1] for j, i in combinations if i >= 1 and i == start_time and i < start_time + time_delta))
+        # Not start time
+    m.addConstrs( (first_doses[j,i] + second_doses[j,i] + stocks[j,i] == real_B[j,i] + stocks[j,i-1] for j, i in combinations if i > 0 and i != start_time and i < start_time + time_delta))    
+        # Start time
+    m.addConstrs( (first_doses[j,i] + second_doses[j,i] + stocks[j,i] == real_B[j,i] + remain_stocks[j][i-1] for j, i in combinations if i > 0 and i == start_time and i < start_time + time_delta))
 
     # B list
     m.addConstrs( (first_doses[j,i] + 0 + stocks[j,i] == B[j,i] + 0 for j, i in combinations if i == 0 and i >= start_time + time_delta))
-    m.addConstrs( (first_doses[j,i] + second_doses[j,i] + stocks[j,i] == B[j,i] + stocks[j,i-1] for j, i in combinations if i >= 1 and i >= start_time + time_delta))
-    
-    m.addConstrs( (first_doses[j,i] + 0 + stocks[j,i] == B[j,i] + 0 for j, i in combinations if i == 0 and i == start_time and i >= start_time + time_delta))
-    m.addConstrs( (first_doses[j,i] + second_doses[j,i] + stocks[j,i] == B[j,i] + remain_stocks[j][i-1] for j, i in combinations if i >= 1 and i == start_time and i >= start_time + time_delta))
+        # Not start time
+    m.addConstrs( (first_doses[j,i] + second_doses[j,i] + stocks[j,i] == B[j,i] + stocks[j,i-1] for j, i in combinations if i > 0 and i != start_time and i >= start_time + time_delta))
+        # Start time
+    m.addConstrs( (first_doses[j,i] + second_doses[j,i] + stocks[j,i] == B[j,i] + remain_stocks[j][i-1] for j, i in combinations if i > 0 and i == start_time and i >= start_time + time_delta))
 
     m.setObjective(  (gp.quicksum(first_doses[j,i] * (i+Delta[j]) for j,i in combinations) + 1000 * ( stocks['Pfizer', T-1] + stocks['Moderna', T-1] + stocks['Astrazeneca', T-1])), GRB.MINIMIZE)
 
