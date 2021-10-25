@@ -14,8 +14,8 @@ CSV_INPUT_FOLDER = "input_csv"
 CSV_OUTPUT_FOLDER = "csv_solution_v2"
 T = 180
 NUMBER_OF_ELEMENT = 30
-LIMIT_CAPACITY = 8
-INCREMENT = 0.5
+LIMIT_CAPACITY = 2
+INCREMENT = 2
 LAST_DAY_VACCINES = True
 
 def optimize_test_capacity_multiple_vaccines_robust(T, Delta, Capacity, Instance):
@@ -455,10 +455,7 @@ if __name__ == "__main__":
     file_list = os.listdir(CSV_INPUT_FOLDER)
     instances = np.arange(1, T + 1, 1).tolist()
 
-    for i in range(0, len(os.listdir(CSV_INPUT_FOLDER)) -2  - (1000 - NUMBER_OF_ELEMENT) ):
-
-        if i == 45:
-            continue
+    for i in range(0, len(os.listdir(CSV_INPUT_FOLDER)) - 900 ):
 
         print("Processing instance: " + str(i))
 
@@ -754,6 +751,8 @@ if __name__ == "__main__":
     df['Heuristic 7-days-ahead max negative stocks'] = total_min_negative_stocks_risk_7
     df['Heuristic 14-days-ahead max negative stocks'] = total_min_negative_stocks_risk_14
     df['Heuristic 21-days-ahead max negative stocks'] = total_min_negative_stocks_risk_21
+
+    print(avg_optimal_value)
 
 
     if LAST_DAY_VACCINES:

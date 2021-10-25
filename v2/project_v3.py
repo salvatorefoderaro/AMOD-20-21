@@ -19,23 +19,27 @@ INCREMENT = 2
 LAST_DAY_VACCINES = True
 PERCENTAGE = 0
 
-def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity, start_time, planned_second_doses, remain_stocks):
+def optimize_test_capacity_multiple_vaccines(T, B, real_B, time_delta, Delta, Capacity, start_time, remain_stocks, planned_first_doses):
 
     m = gp.Model("vaccinations")
-
-    #if PRINT == False:
 
     m.Params.LogToConsole = 0
 
     dicti = {}
     dict_B = {}
+    dict_real_B = {}
 
     for i in B:
-        for j in range(start_time, T):
+        for j in range(0, T):
             dicti[(i, j)] = [j+1]
             dict_B[(i,j)] = B[i][j]  
+            dict_real_B[(i,j)] = real_B[i][j]
+    
     original_B = B
+    original_real_B = real_B
+
     B = dict_B
+    real_B = dict_real_B
 
     combinations, time_frame = gp.multidict(dicti)
 
@@ -43,21 +47,31 @@ def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity, start_time, 
     second_doses = m.addVars(combinations, lb = 0.0, vtype=GRB.INTEGER, name="Second_Doses")
     stocks = m.addVars(combinations, lb=0.0, vtype=GRB.INTEGER, name="Stocks")
     
-    m.addConstrs( (first_doses.sum('*',j) + second_doses.sum('*', j) + planned_second_doses["Astrazeneca"][j] + planned_second_doses["Pfizer"][j] + planned_second_doses["Moderna"][j] <= Capacity for j in range(start_time, T)))  
+    m.addConstrs( (first_doses.sum('*',j) + second_doses.sum('*', j)) <= Capacity for j in range(start_time, T))
 
     m.addConstrs( (first_doses[j, i] == second_doses[j,i+Delta[j]] for j, i in combinations if i < T-Delta[j] ))
     m.addConstrs( (first_doses[j, i] == 0 for j, i in combinations if i >= T-Delta[j] ))
+    m.addConstrs( (first_doses[j, i] == planned_first_doses[j][i] for j, i in combinations if i < start_time ))
 
     m.addConstrs( second_doses[j,i] == 0 for j, i in combinations if i < Delta[j])
+
+    # m.addConstrs( stocks[j,i-1] == remain_stocks[j][i-1] for j, i in combinations if i > 0 and i == start_time)
+
+    # real_B list
+    m.addConstrs( (first_doses[j,i] + 0 + stocks[j,i] == real_B[j,i] + 0 for j, i in combinations if i == 0 and i < start_time + time_delta))
+    m.addConstrs( (first_doses[j,i] + second_doses[j,i] + stocks[j,i] == real_B[j,i] + stocks[j,i-1] for j, i in combinations if i >= 1 and i < start_time + time_delta))    
     
-    m.addConstrs( (first_doses[j,i] + 0 + stocks[j,i] == B[j,i] + 0 for j, i in combinations if i == 0))
-    m.addConstrs( (first_doses[j,i] + 0 + stocks[j,i] == B[j,i] + stocks[j,i-1] for j, i in combinations if i >= 1 and i < Delta[j]  and i!= start_time ))
-    m.addConstrs( (first_doses[j,i] + planned_second_doses[j][i] + second_doses[j,i] + stocks[j,i] == B[j,i] + stocks[j, i-1] for j, i in combinations if i >= 1 and i >= Delta[j] and i != start_time))
+    m.addConstrs( (first_doses[j,i] + 0 + stocks[j,i] == real_B[j,i] + 0 for j, i in combinations if i == 0 and i == start_time and i < start_time + time_delta))
+    m.addConstrs( (first_doses[j,i] + second_doses[j,i] + stocks[j,i] == real_B[j,i] + remain_stocks[j][i-1] for j, i in combinations if i >= 1 and i == start_time and i < start_time + time_delta))
 
-    m.addConstrs( (first_doses[j,i] + 0 + stocks[j,i] == B[j,i] + remain_stocks[j][start_time-1] for j, i in combinations if i >= 1 and i < Delta[j] and i == start_time))
-    m.addConstrs( (first_doses[j,i] + planned_second_doses[j][i] + second_doses[j,i] + stocks[j,i] == B[j,i] + remain_stocks[j][start_time-1] for j, i in combinations if i >= 1 and i >= Delta[j] and i == start_time))
+    # B list
+    m.addConstrs( (first_doses[j,i] + 0 + stocks[j,i] == B[j,i] + 0 for j, i in combinations if i == 0 and i >= start_time + time_delta))
+    m.addConstrs( (first_doses[j,i] + second_doses[j,i] + stocks[j,i] == B[j,i] + stocks[j,i-1] for j, i in combinations if i >= 1 and i >= start_time + time_delta))
+    
+    m.addConstrs( (first_doses[j,i] + 0 + stocks[j,i] == B[j,i] + 0 for j, i in combinations if i == 0 and i == start_time and i >= start_time + time_delta))
+    m.addConstrs( (first_doses[j,i] + second_doses[j,i] + stocks[j,i] == B[j,i] + remain_stocks[j][i-1] for j, i in combinations if i >= 1 and i == start_time and i >= start_time + time_delta))
 
-    m.setObjective(  (gp.quicksum(second_doses[j,i] * i for j,i in combinations) + 1000 * ( stocks['Pfizer', T-1] + stocks['Moderna', T-1] + stocks['Astrazeneca', T-1])), GRB.MINIMIZE)
+    m.setObjective(  (gp.quicksum(first_doses[j,i] * (i+Delta[j]) for j,i in combinations) + 1000 * ( stocks['Pfizer', T-1] + stocks['Moderna', T-1] + stocks['Astrazeneca', T-1])), GRB.MINIMIZE)
 
     m.optimize()
 
@@ -71,23 +85,25 @@ def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity, start_time, 
 
         for i in range(0, len(original_B)):
             
-            first_doses_dict[list(original_B)[i]] = resultList[(T-start_time)*i:(T-start_time)*(i+1)]
-            first_doses_values = resultList[(T-start_time)*i:(T-start_time)*(i+1)]
+            first_doses_dict[list(original_B)[i]] = resultList[(T)*i:(T)*(i+1)]
+            first_doses_values = resultList[(T)*i:(T)*(i+1)]
 
         for i in range(0, len(original_B)):
 
-            second_doses_dict[list(original_B)[i]] = resultList[(T-start_time)*(i+len(original_B)):(T-start_time)*(i+1+len(original_B))]
-            second_doses_values = resultList[(T-start_time)*(i+len(original_B)):(T-start_time)*(i+1+len(original_B))]
+            second_doses_dict[list(original_B)[i]] = resultList[(T)*(i+len(original_B)):(T)*(i+1+len(original_B))]
+            second_doses_values = resultList[(T)*(i+len(original_B)):(T)*(i+1+len(original_B))]
         
         for i in range(0, len(original_B)):
-            stocks_dict[list(original_B)[i]] = resultList[(T-start_time)*(i+2*len(original_B)):(T-start_time)*(i+1+2*len(original_B))]
-            stock_values = resultList[(T-start_time)*(i+2*len(original_B)):(T-start_time)*(i+1+2*len(original_B))]
+            stocks_dict[list(original_B)[i]] = resultList[(T)*(i+2*len(original_B)):(T)*(i+1+2*len(original_B))]
+            stock_values = resultList[(T)*(i+2*len(original_B)):(T)*(i+1+2*len(original_B))]
 
         object_function_value = m.objVal
+        
         return[first_doses_dict, second_doses_dict, stocks_dict, object_function_value]
     else:
         print("\n***** No solutions found *****")
         return -1
+
 
 def get_column_from_df(df, column_name):
     return df[column_name].values.tolist()
@@ -146,7 +162,11 @@ if __name__ == "__main__":
 
         # For each capacity...
 
+        capacity_list = []
+
         for u in capacity:
+
+            capacity_list.append(u)
 
             penality_sum = 0
             second_doses_sum = 0
@@ -154,7 +174,7 @@ if __name__ == "__main__":
             REMAIN_STOCKS = {"Pfizer": 0, "Moderna" : 0, "Astrazeneca" : 0}
 
             # Calcolo la prima soluzione
-            result = optimize_test_capacity_multiple_vaccines(len(b_list_0), b_list, DELTA, capacity[u], 0, seconde_dosi_effettuate, scorte)
+            result = optimize_test_capacity_multiple_vaccines(len(b_list_0), b_list, b_list, 0, DELTA, capacity[u], 0, scorte, prime_dosi_effettuate)
 
             # Se ho errore su un'istanza, la aggiungo alla lista per effettuare un controllo successivamente
             if result == -1:
@@ -169,7 +189,7 @@ if __name__ == "__main__":
             for t in range (0, T):
 
                 # Se ho aggiornamenti, ricalcolo la soluzione ottima
-                if t  > 1000 and t % 3 == 0: # Aggiungere il controllo in caso di ricalcolo
+                if t  > 1000 and t % 20 == 0: # Aggiungere il controllo in caso di ricalcolo
                     scorte["Pfizer"][t-1] += REMAIN_STOCKS["Pfizer"]
                     scorte["Moderna"][t-1] += REMAIN_STOCKS["Moderna"]
                     scorte["Astrazeneca"][t-1] += REMAIN_STOCKS["Astrazeneca"]
@@ -178,33 +198,26 @@ if __name__ == "__main__":
                     REMAIN_STOCKS["Moderna"] = 0
                     REMAIN_STOCKS["Astrazeneca"] = 0
 
-                    result = optimize_test_capacity_multiple_vaccines(len(b_list_0), b_list, DELTA, capacity[u], t, seconde_dosi_effettuate, scorte)
+                    result = optimize_test_capacity_multiple_vaccines(len(b_list_0), b_list, b_list, 0, DELTA, capacity[u], t, scorte, prime_dosi_effettuate)
 
                     # Se ho errore su un'istanza, la aggiungo alla lista per effettuare un controllo successivamente
                     if result == -1:
                         instances_error.append(i)
+                        input()
                         continue
 
                     scorte = result[2]
-                    
-                    prime_dosi_programmate["Pfizer"] = [0]*(180 - len(result[0]["Pfizer"])) + result[0]["Pfizer"]
-                    prime_dosi_programmate["Moderna"] = [0]*(180 - len(result[0]["Moderna"])) + result[0]["Moderna"]
-                    prime_dosi_programmate["Astrazeneca"] = [0]*(180 - len(result[0]["Astrazeneca"])) + result[0]["Astrazeneca"]
-
-                    scorte["Pfizer"] = [0]*(180 - len(scorte["Pfizer"])) + scorte["Pfizer"]
-                    scorte["Moderna"] = [0]*(180 - len(scorte["Moderna"])) + scorte["Moderna"]
-                    scorte["Astrazeneca"] = [0]*(180 - len(scorte["Astrazeneca"])) + scorte["Astrazeneca"]
+                    prime_dosi_programmate = result[0]
 
                 # Aggiorno il valore delle prime dosi somministrate e della soluzione
                 for i in prime_dosi_effettuate:
-
+                    
                     prime_dosi_effettuate[i][t] = int( prime_dosi_programmate[i][t] * (1-PERCENTAGE) )
                     REMAIN_STOCKS[i] += prime_dosi_programmate[i][t] - prime_dosi_effettuate[i][t]
 
                     if (t + DELTA[i] < T):
                         seconde_dosi_effettuate[i][t+DELTA[i]] = prime_dosi_effettuate[i][t]
                         total_value += seconde_dosi_effettuate[i][t+DELTA[i]] * (t+DELTA[i])
-
             
             # Aggiungo le scorte finali al computo del valore della soluzione
             scorte["Pfizer"][len(scorte["Pfizer"])-1] += REMAIN_STOCKS["Pfizer"]
@@ -224,6 +237,10 @@ if __name__ == "__main__":
 
             # print(optimal_result_without_penality)
             result_list.append(optimal_result_without_penality)
+
+    '''df = pd.DataFrame(capacity_list, columns= ['Stocks_Percentae'])
+    add_column_to_df(df, [mean(result_list)], "Test")
+    df.to_csv("Test.csv")'''
 
     print(instances_error)
     print(mean(result_list))
