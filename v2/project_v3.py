@@ -14,8 +14,8 @@ CSV_INPUT_FOLDER = "input_csv"
 CSV_OUTPUT_FOLDER = "csv_solution_v2"
 T = 180
 NUMBER_OF_ELEMENT = 5
-LIMIT_CAPACITY = 2
-INCREMENT = 2
+LIMIT_CAPACITY = 1
+INCREMENT = 0.05
 LAST_DAY_VACCINES = True
 PERCENTAGE = 0
 
@@ -104,6 +104,16 @@ def optimize_test_capacity_multiple_vaccines(T, B, real_B, time_delta, Delta, Ca
         print("\n***** No solutions found *****")
         return -1
 
+def dict_to_list(dict):
+    value_list = []
+    for i in dict:
+        value_list.append(dict[i])
+    return value_list
+
+def dict_to_mean(dict):
+    for i in dict:
+        dict[i] = mean(dict[i])
+    return dict
 
 def get_column_from_df(df, column_name):
     return df[column_name].values.tolist()
@@ -123,6 +133,16 @@ if __name__ == "__main__":
     instances_error = []
     result_list = []
 
+    percentage_list = {}
+    list_index = []
+
+    num = 0
+    while(num < LIMIT_CAPACITY):
+        percentage_list[str(num)] = []
+        num += INCREMENT
+        num = round(num, 2)
+        list_index.append(num)
+        
     for i in range(0, len(os.listdir(CSV_INPUT_FOLDER)) - 900):
 
         print("Processing instance: " + str(i))
@@ -155,92 +175,99 @@ if __name__ == "__main__":
         capacity = {}
 
         num = 1
-        while(num < LIMIT_CAPACITY):
-            capacity[str(num) + " c"] =  int(num * int(total_capacity/180))
-            num += INCREMENT
+        while(num < 2):
+            capacity[num] =  int(num * int(total_capacity/180))
+            num += 1
             num = round(num, 2)
 
         # For each capacity...
 
         capacity_list = []
 
-        for u in capacity:
+        for p in percentage_list:
 
-            capacity_list.append(u)
+            for u in capacity:
 
-            penality_sum = 0
-            second_doses_sum = 0
-            new_doses = 0
-            REMAIN_STOCKS = {"Pfizer": 0, "Moderna" : 0, "Astrazeneca" : 0}
+                capacity_list.append(u)
 
-            # Calcolo la prima soluzione
-            result = optimize_test_capacity_multiple_vaccines(len(b_list_0), b_list, b_list, 0, DELTA, capacity[u], 0, scorte, prime_dosi_effettuate)
+                penality_sum = 0
+                second_doses_sum = 0
+                new_doses = 0
+                REMAIN_STOCKS = {"Pfizer": 0, "Moderna" : 0, "Astrazeneca" : 0}
 
-            # Se ho errore su un'istanza, la aggiungo alla lista per effettuare un controllo successivamente
-            if result == -1:
-                instances_error.append(i)
-                continue
-            
-            scorte = result[2]
-            prime_dosi_programmate = result[0]
+                # Calcolo la prima soluzione
+                result = optimize_test_capacity_multiple_vaccines(len(b_list_0), b_list, b_list, 0, DELTA, capacity[u], 0, scorte, prime_dosi_effettuate)
 
-            total_value = 0
+                # Se ho errore su un'istanza, la aggiungo alla lista per effettuare un controllo successivamente
+                if result == -1:
+                    instances_error.append(i)
+                    continue
+                
+                scorte = result[2]
+                prime_dosi_programmate = result[0]
 
-            for t in range (0, T):
+                total_value = 0
 
-                # Se ho aggiornamenti, ricalcolo la soluzione ottima
-                if t  > 1000 and t % 20 == 0: # Aggiungere il controllo in caso di ricalcolo
-                    scorte["Pfizer"][t-1] += REMAIN_STOCKS["Pfizer"]
-                    scorte["Moderna"][t-1] += REMAIN_STOCKS["Moderna"]
-                    scorte["Astrazeneca"][t-1] += REMAIN_STOCKS["Astrazeneca"]
+                for t in range (0, T):
 
-                    REMAIN_STOCKS["Pfizer"] = 0
-                    REMAIN_STOCKS["Moderna"] = 0
-                    REMAIN_STOCKS["Astrazeneca"] = 0
+                    # Se ho aggiornamenti, ricalcolo la soluzione ottima
+                    if t  > 1000 and t % 20 == 0: # Aggiungere il controllo in caso di ricalcolo
+                        scorte["Pfizer"][t-1] += REMAIN_STOCKS["Pfizer"]
+                        scorte["Moderna"][t-1] += REMAIN_STOCKS["Moderna"]
+                        scorte["Astrazeneca"][t-1] += REMAIN_STOCKS["Astrazeneca"]
 
-                    result = optimize_test_capacity_multiple_vaccines(len(b_list_0), b_list, b_list, 0, DELTA, capacity[u], t, scorte, prime_dosi_effettuate)
+                        REMAIN_STOCKS["Pfizer"] = 0
+                        REMAIN_STOCKS["Moderna"] = 0
+                        REMAIN_STOCKS["Astrazeneca"] = 0
 
-                    # Se ho errore su un'istanza, la aggiungo alla lista per effettuare un controllo successivamente
-                    if result == -1:
-                        instances_error.append(i)
-                        input()
-                        continue
+                        result = optimize_test_capacity_multiple_vaccines(len(b_list_0), b_list, b_list, 0, DELTA, capacity[u], t, scorte, prime_dosi_effettuate)
 
-                    scorte = result[2]
-                    prime_dosi_programmate = result[0]
+                        # Se ho errore su un'istanza, la aggiungo alla lista per effettuare un controllo successivamente
+                        if result == -1:
+                            instances_error.append(i)
+                            input()
+                            continue
 
-                # Aggiorno il valore delle prime dosi somministrate e della soluzione
-                for i in prime_dosi_effettuate:
-                    
-                    prime_dosi_effettuate[i][t] = int( prime_dosi_programmate[i][t] * (1-PERCENTAGE) )
-                    REMAIN_STOCKS[i] += prime_dosi_programmate[i][t] - prime_dosi_effettuate[i][t]
+                        scorte = result[2]
+                        prime_dosi_programmate = result[0]
 
-                    if (t + DELTA[i] < T):
-                        seconde_dosi_effettuate[i][t+DELTA[i]] = prime_dosi_effettuate[i][t]
-                        total_value += seconde_dosi_effettuate[i][t+DELTA[i]] * (t+DELTA[i])
-            
-            # Aggiungo le scorte finali al computo del valore della soluzione
-            scorte["Pfizer"][len(scorte["Pfizer"])-1] += REMAIN_STOCKS["Pfizer"]
-            scorte["Moderna"][len(scorte["Moderna"])-1] += REMAIN_STOCKS["Moderna"]
-            scorte["Astrazeneca"][len(scorte["Astrazeneca"])-1] += REMAIN_STOCKS["Astrazeneca"]      
+                    # Aggiorno il valore delle prime dosi somministrate e della soluzione
+                    for i in prime_dosi_effettuate:
+                        
+                        prime_dosi_effettuate[i][t] = int( prime_dosi_programmate[i][t] * (1-float(p)) )
+                        REMAIN_STOCKS[i] += prime_dosi_programmate[i][t] - prime_dosi_effettuate[i][t]
 
-            second_doses_sum =sum(seconde_dosi_effettuate["Pfizer"]) + sum(seconde_dosi_effettuate["Moderna"]) + sum(seconde_dosi_effettuate["Astrazeneca"])            
-            penality_sum = scorte["Pfizer"][len(scorte["Pfizer"])-1] + scorte["Moderna"][len(scorte["Moderna"])-1] + scorte["Astrazeneca"][len(scorte["Astrazeneca"])-1]
+                        if (t + DELTA[i] < T):
+                            seconde_dosi_effettuate[i][t+DELTA[i]] = prime_dosi_effettuate[i][t]
+                            total_value += seconde_dosi_effettuate[i][t+DELTA[i]] * (t+DELTA[i])
+                
+                # Aggiungo le scorte finali al computo del valore della soluzione
+                scorte["Pfizer"][len(scorte["Pfizer"])-1] += REMAIN_STOCKS["Pfizer"]
+                scorte["Moderna"][len(scorte["Moderna"])-1] += REMAIN_STOCKS["Moderna"]
+                scorte["Astrazeneca"][len(scorte["Astrazeneca"])-1] += REMAIN_STOCKS["Astrazeneca"]      
 
-            new_doses = 0
-            new_doses += (scorte["Pfizer"][len(scorte["Pfizer"])-1] / 2) * (180 + DELTA["Pfizer"])
-            new_doses += (scorte["Moderna"][len(scorte["Moderna"])-1] / 2) * (180 + DELTA["Moderna"])
-            new_doses += (scorte["Astrazeneca"][len(scorte["Astrazeneca"])-1] / 2) * (180 + DELTA["Astrazeneca"])
+                second_doses_sum =sum(seconde_dosi_effettuate["Pfizer"]) + sum(seconde_dosi_effettuate["Moderna"]) + sum(seconde_dosi_effettuate["Astrazeneca"])            
+                penality_sum = scorte["Pfizer"][len(scorte["Pfizer"])-1] + scorte["Moderna"][len(scorte["Moderna"])-1] + scorte["Astrazeneca"][len(scorte["Astrazeneca"])-1]
 
-            # Add all vaccine last day
-            optimal_result_without_penality = (total_value + new_doses) / (second_doses_sum + penality_sum/2)
+                new_doses = 0
+                new_doses += (scorte["Pfizer"][len(scorte["Pfizer"])-1] / 2) * (180 + DELTA["Pfizer"])
+                new_doses += (scorte["Moderna"][len(scorte["Moderna"])-1] / 2) * (180 + DELTA["Moderna"])
+                new_doses += (scorte["Astrazeneca"][len(scorte["Astrazeneca"])-1] / 2) * (180 + DELTA["Astrazeneca"])
 
-            # print(optimal_result_without_penality)
-            result_list.append(optimal_result_without_penality)
+                # Add all vaccine last day
+                optimal_result_without_penality = (total_value + new_doses) / (second_doses_sum + penality_sum/2)
 
-    '''df = pd.DataFrame(capacity_list, columns= ['Stocks_Percentae'])
-    add_column_to_df(df, [mean(result_list)], "Test")
-    df.to_csv("Test.csv")'''
+                # print(optimal_result_without_penality)
+                result_list.append(optimal_result_without_penality)
+
+                percentage_list[p].append(optimal_result_without_penality)
+
+    df = pd.DataFrame(list_index, columns= ['Stocks_Percentae'])
+    df = df.reset_index()
+
+    percentage_list = dict_to_mean(percentage_list)
+    add_column_to_df(df, dict_to_list(percentage_list), "Test")
+    df.to_csv("Test.csv", index=0)
 
     print(instances_error)
     print(mean(result_list))

@@ -7,16 +7,20 @@ from pathlib import Path
 from statistics import mean
 import sys
 import shutil
+import locale
+import matplotlib.pyplot as plt
+import numpy as np
 
 PRINT = False
 DELTA = {'Pfizer': 21, 'Moderna': 28, 'Astrazeneca': 78}
 CSV_INPUT_FOLDER = "input_csv"
 CSV_OUTPUT_FOLDER = "csv_solution_v2"
 T = 180
-NUMBER_OF_ELEMENT = 100
-LIMIT_CAPACITY = 2
-INCREMENT = 2
+NUMBER_OF_ELEMENT = 10
+LIMIT_CAPACITY = 7
+INCREMENT = 1
 LAST_DAY_VACCINES = True
+ALPHA_LIST = [0, 0.2, 0.4]
 
 def optimize_test_capacity_multiple_vaccines_robust(T, Delta, Capacity, Instance):
 
@@ -97,11 +101,11 @@ def optimize_test_capacity_multiple_vaccines_robust(T, Delta, Capacity, Instance
     else:
         print("\n***** No solutions found *****")
 
-def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity):
+def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity, heu_result, alpha):
 
     m = gp.Model("vaccinations")
 
-    #if PRINT == False:
+    somma = sum(B["Pfizer"]) + sum(B["Astrazeneca"]) + sum(B["Moderna"])
 
     m.Params.LogToConsole = 0
 
@@ -120,6 +124,7 @@ def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity):
     first_doses = m.addVars(combinations, lb=0.0, vtype=GRB.INTEGER, name="First_Doses")
     second_doses = m.addVars(combinations, lb = 0.0, vtype=GRB.INTEGER, name="Second_Doses")
     stocks = m.addVars(combinations, lb=0.0, vtype=GRB.INTEGER, name="Stocks")
+    z = m.addVar(lb = 0.0, vtype = GRB.INTEGER, name="Z")
 
     m.addConstrs( (first_doses.sum('*',j) + second_doses.sum('*', j) <= Capacity for j in range(0, T)))  
 
@@ -132,10 +137,14 @@ def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity):
     m.addConstrs( (first_doses[j,i] + 0 + stocks[j,i] == B[j,i] + stocks[j,i-1] for j, i in combinations if i >= 1 and i < Delta[j]))
     m.addConstrs( (first_doses[j,i] + first_doses[j,i-Delta[j]] + stocks[j,i] == B[j,i] + stocks[j, i-1] for j, i in combinations if i >= 1 and i >= Delta[j]))
 
-    m.setObjective(  (gp.quicksum(second_doses[j,i] * i for j,i in combinations) + 1000 * ( stocks['Pfizer', T-1] + stocks['Moderna', T-1] + stocks['Astrazeneca', T-1])), GRB.MINIMIZE)
+    for i in range(0, 180):
+            m.addConstr( z >= first_doses["Astrazeneca",i] + first_doses["Moderna",i] + first_doses["Pfizer",i] + second_doses["Astrazeneca",i] + second_doses["Moderna",i] + second_doses["Pfizer",i])
+
+    # m.setObjective( alpha * (z / Capacity ) + (1-alpha) * ( ( ( gp.quicksum(second_doses[j,i] * i for j,i in combinations ) + stocks["Pfizer", T-1] * (180 + Delta["Pfizer"]) + stocks["Moderna", T-1] * (180 + Delta["Moderna"]) + stocks["Astrazeneca", T-1] * (180 + Delta["Astrazeneca"])  ) / (somma / 2) ) / heu_result ) + ( 1000 * ( stocks['Pfizer', T-1] + stocks['Moderna', T-1] + stocks['Astrazeneca', T-1]) ), GRB.MINIMIZE)
+    m.setObjective( alpha * (z) + (1-alpha) * ( ( ( gp.quicksum(second_doses[j,i] * i for j,i in combinations ) + stocks["Pfizer", T-1] * (180 + Delta["Pfizer"]) + stocks["Moderna", T-1] * (180 + Delta["Moderna"]) + stocks["Astrazeneca", T-1] * (180 + Delta["Astrazeneca"]) ) / (1) ) / 1)  + 1000 * (stocks["Astrazeneca", T-1] + stocks["Moderna", T-1] + stocks["Pfizer", T-1]) , GRB.MINIMIZE)
 
     m.optimize()
-
+        
     if (m.solCount > 0):
 
         resultList = m.getAttr(GRB.Attr.X, m.getVars())
@@ -158,8 +167,14 @@ def optimize_test_capacity_multiple_vaccines(T, B, Delta, Capacity):
             stocks_dict[list(original_B)[i]] = resultList[T*(i+2*len(original_B)):T*(i+1+2*len(original_B))]
             stock_values = resultList[T*(i+2*len(original_B)):T*(i+1+2*len(original_B))]
 
+        max_value = 0
+        for kk in range (0, 180):
+            somma = second_doses["Astrazeneca", kk].X + second_doses["Moderna",kk].X + second_doses["Pfizer", kk].X + first_doses["Astrazeneca", kk].X + first_doses["Moderna",kk].X + first_doses["Pfizer", kk].X
+            if somma > max_value:
+                max_value = somma
         object_function_value = m.objVal
-        return[first_doses_dict, second_doses_dict, stocks_dict, object_function_value]
+
+        return[first_doses_dict, second_doses_dict, stocks_dict, object_function_value, z.X]
     else:
         print("\n***** No solutions found *****")
 
@@ -256,6 +271,13 @@ def heuristic_v2_risk(b_list, capacity, q):
     total_dose_somministrated += doses_somministrated["Astrazeneca"] * 2
     total_dose_somministrated += doses_somministrated["Moderna"] * 2
 
+    z = 0
+
+    for tt in range(0, 180):
+        somma = vaccines["Pfizer"][1][tt] + vaccines["Pfizer"][2][tt] + vaccines["Moderna"][1][tt] + vaccines["Moderna"][2][tt] + vaccines["Astrazeneca"][1][tt] + vaccines["Astrazeneca"][2][tt]
+        if somma > z:
+            z = somma
+
     stocks_at_end = 0
     stocks_at_end += total_arrival["Pfizer"] - doses_somministrated["Pfizer"] * 2
     stocks_at_end += total_arrival["Moderna"] - doses_somministrated["Moderna"] * 2
@@ -266,7 +288,7 @@ def heuristic_v2_risk(b_list, capacity, q):
         object_function += (total_arrival["Pfizer"] - doses_somministrated["Pfizer"] * 2) * (180+21)
         object_function += (total_arrival["Moderna"] - doses_somministrated["Moderna"] * 2) * (180+28)
         object_function += (total_arrival["Astrazeneca"] - doses_somministrated["Astrazeneca"] * 2) * (180+78)
-        return [ (object_function ) / ((total_dose_somministrated + stocks_at_end)/2) , 0, abs(negative_stocks)/arrival_sum, count_negative/ (3*180), (utilization)/sum_total_arrival, min_negative_stocks]
+        return [ (object_function ) / ((total_dose_somministrated + stocks_at_end)/2) , 0, abs(negative_stocks)/arrival_sum, count_negative/ (3*180), (utilization)/sum_total_arrival, min_negative_stocks, z]
 
     else:
         return [ (object_function ) / (total_dose_somministrated) , stocks_at_end, abs(negative_stocks)/arrival_sum, (count_negative)/ (3*180), (utilization)/sum_total_arrival, min_negative_stocks]
@@ -332,6 +354,13 @@ def heuristic_v2(b_list, capacity):
     total_dose_somministrated += doses_somministrated["Astrazeneca"] * 2
     total_dose_somministrated += doses_somministrated["Moderna"] * 2
 
+    z = 0
+
+    for tt in range(0, 180):
+        somma = vaccines["Pfizer"][1][tt] + vaccines["Pfizer"][2][tt] + vaccines["Moderna"][1][tt] + vaccines["Moderna"][2][tt] + vaccines["Astrazeneca"][1][tt] + vaccines["Astrazeneca"][2][tt]
+        if somma > z:
+            z = somma
+
     stocks_at_end = 0
     stocks_at_end += total_arrival["Pfizer"] - doses_somministrated["Pfizer"] * 2
     stocks_at_end += total_arrival["Moderna"] - doses_somministrated["Moderna"] * 2
@@ -343,33 +372,25 @@ def heuristic_v2(b_list, capacity):
 
     if LAST_DAY_VACCINES:
 
-        object_function += (total_arrival["Pfizer"] - doses_somministrated["Pfizer"] * 2) * (180+21)
-        object_function += (total_arrival["Moderna"] - doses_somministrated["Moderna"] * 2) * (180+28)
-        object_function += (total_arrival["Astrazeneca"] - doses_somministrated["Astrazeneca"] * 2) * (180+78)
+        object_function += (total_arrival["Pfizer"] - doses_somministrated["Pfizer"] * 2)  * (180+21)
+        object_function += (total_arrival["Moderna"] - doses_somministrated["Moderna"] * 2)  * (180+28)
+        object_function += (total_arrival["Astrazeneca"] - doses_somministrated["Astrazeneca"] * 2)  * (180+78)
 
-        return [ (object_function ) / ((total_dose_somministrated + stocks_at_end)/2) , 0, (total_dose_somministrated/2)/sum_total_arrival]
+        return [ (object_function ) / ((total_dose_somministrated + stocks_at_end)/2) , 0, (total_dose_somministrated/2)/sum_total_arrival, z]
     
     else:
         return [ (object_function ) / (total_dose_somministrated) , stocks_at_end, (total_dose_somministrated/2)/sum_total_arrival]
 
 if __name__ == "__main__":
 
+    locale.setlocale(locale.LC_ALL, "de_DE"	)
+
     shutil.rmtree("csv_solution_v2")
     os.mkdir("csv_solution_v2")
 
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "True":
-            LAST_DAY_VACCINES = True
-            INCREMENT = float(sys.argv[2])
-            NUMBER_OF_ELEMENT = int(sys.argv[3])
-        else:
-            LAST_DAY_VACCINES = False
-            INCREMENT = float(sys.argv[2])
-            NUMBER_OF_ELEMENT = int(sys.argv[3])
-    
-    robust_optimization = {}
     penality_optimal_result = {}
     optimal_result = {}
+    optimal_result_z = {}
 
     min_negative_stocks_risk = {}
     min_negative_stocks_risk_7 = {}
@@ -385,6 +406,12 @@ if __name__ == "__main__":
     heuristic_risk_result_7 = {}
     heuristic_risk_result_14 = {}
     heuristic_risk_result_21 = {}
+
+    heuristic_result_z = {}
+    heuristic_risk_result_z = {}
+    heuristic_risk_result_7_z = {}
+    heuristic_risk_result_14_z = {}
+    heuristic_risk_result_21_z = {}
 
     utilization_T = {}
     utilization_T_heuristic = {}
@@ -409,10 +436,20 @@ if __name__ == "__main__":
     heuristic_risk_negative_arrival_14 = {}
     heuristic_risk_negative_arrival_21 = {}
 
+    z_value = []
+
     num = 1
     while(num < (LIMIT_CAPACITY)):
-        penality_optimal_result[str(num) + " c"] = []
-        optimal_result[str(num) + " c"] = []
+        penality_optimal_result[str(num) + " c"] = {}
+        optimal_result[str(num) + " c"] = {}
+        optimal_result_z[str(num) + " c"] = {}
+        utilization_T[str(num) + " c"] = {}
+
+        for alpha_value in ALPHA_LIST:
+            penality_optimal_result[str(num) + " c"][alpha_value] = []
+            optimal_result[str(num) + " c"][alpha_value] = []
+            optimal_result_z[str(num) + " c"][alpha_value] = []
+            utilization_T[str(num) + " c"][alpha_value] = []
 
         min_negative_stocks_risk[str(num) + " c"] = 0
         min_negative_stocks_risk_7[str(num) + " c"] = 0
@@ -425,13 +462,18 @@ if __name__ == "__main__":
         heuristic_risk_result_14[str(num) + " c"] = []
         heuristic_risk_result_21[str(num) + " c"] = []
 
+        heuristic_result_z[str(num) + " c"] = []
+        heuristic_risk_result_z[str(num) + " c"] = []
+        heuristic_risk_result_7_z[str(num) + " c"] = []
+        heuristic_risk_result_14_z[str(num) + " c"] = []
+        heuristic_risk_result_21_z[str(num) + " c"] = []
+
         penality_heuristic[str(num) + " c"] = []
         penality_heuristic_risk[str(num) + " c"] = []
         penality_heuristic_risk_7[str(num) + " c"] = []
         penality_heuristic_risk_14[str(num) + " c"] = []
         penality_heuristic_risk_21[str(num) + " c"] = []
 
-        utilization_T[str(num) + " c"] = []
         utilization_T_heuristic[str(num) + " c"] = []
         utilization_T_heuristic_risk[str(num) + " c"] = []
         utilization_T_heuristic_risk_7[str(num) + " c"] = []
@@ -454,7 +496,7 @@ if __name__ == "__main__":
     file_list = os.listdir(CSV_INPUT_FOLDER)
     instances = np.arange(1, T + 1, 1).tolist()
 
-    for i in range(0, len(os.listdir(CSV_INPUT_FOLDER)) - 900 ):
+    for i in range(0, len(os.listdir(CSV_INPUT_FOLDER)) - (1000 - NUMBER_OF_ELEMENT)):
 
         print("Processing instance: " + str(i))
 
@@ -492,57 +534,39 @@ if __name__ == "__main__":
         # For each capacity...
         for u in capacity:
 
-            result = optimize_test_capacity_multiple_vaccines(len(b_list_0), b_list, DELTA, capacity[u])
+            df["capacity"] = [capacity[u]] * 180
+
             heu_result = heuristic_v2(b_list, capacity[u])
             heu_result_risk = heuristic_v2_risk(b_list, capacity[u], 1)
             heu_result_risk_7 = heuristic_v2_risk(b_list, capacity[u], 7)
             heu_result_risk_14 = heuristic_v2_risk(b_list, capacity[u], 14)
             heu_result_risk_21 = heuristic_v2_risk(b_list, capacity[u], 21)
-
-            # Variable to get the penality for the optimal solution
-            second_doses_sum = 0
-            penality_sum = 0
-            new_doses = 0
-
-            robust_optimization[i] = {}
-
-            for j in result[0]:
-                df["first_doses_" + j] = result[0][j]
-                df["second_doses_" + j] = result[1][j]
-                df["stock_values_" + j] = result[2][j]
-                robust_optimization[i]["stock_values_" + j] = result[2][j][180-1]
-                second_doses_sum += sum(result[1][j])
-                penality_sum += result[2][j][180-1]
-                if LAST_DAY_VACCINES:
-                    new_doses += (result[2][j][180-1]/2) * (180 + DELTA[j]) 
-
-            # Build the capacity list to append at the end of the CSV file
-            df["capacity"] = [capacity[u]] * 180
             
-            # Calculate the optimal result and append to the CSV file
-            solution_penality = 1000 * penality_sum
-            
-            if LAST_DAY_VACCINES:
-                optimal_result_without_penality = (result[3] - solution_penality + new_doses) / (second_doses_sum + penality_sum/2)
-            else:
-                optimal_result_without_penality = (result[3] - solution_penality) / (second_doses_sum)
+            for alpha_value in ALPHA_LIST:
+                #####
+                result = optimize_test_capacity_multiple_vaccines(len(b_list_0), b_list, DELTA, capacity[u], heu_result[0], alpha_value)
+                second_doses_sum = 0
+                penality_sum = 0
+                new_doses = 0
+                solution = 0
 
-            optimal_result[u].append( optimal_result_without_penality )
-
-            robust_optimization[i].update({
-                "Result" : optimal_result_without_penality,
-                "Pfizer":  b_list_0,
-                "Moderna": b_list_1,
-                "Astrazeneca": b_list_2,
-                "TotalB": sum(b_list_0) + sum(b_list_1) + sum(b_list_2)
-                })
-
-            if LAST_DAY_VACCINES:
-                penality_optimal_result[u].append(0)
-            else:
-                penality_optimal_result[u].append( penality_sum )
-
-            utilization_T[u].append( second_doses_sum / total_capacity )
+                for j in result[0]:
+                    df["first_doses_" + j] = result[0][j]
+                    df["second_doses_" + j] = result[1][j]
+                    df["stock_values_" + j] = result[2][j]
+                    second_doses_sum += sum(result[1][j])
+                    penality_sum += result[2][j][180-1]
+                    new_doses += (result[2][j][180-1]/2) * (180 + DELTA[j])
+                    for nn in range(0, len(result[1][j])):
+                        solution += result[1][j][nn] * nn
+                
+                # Calculate the optimal result and append to the CSV file
+                optimal_result_z[u][alpha_value].append(result[4])
+                optimal_result_1 = (solution + new_doses) / (second_doses_sum + penality_sum/2)
+                optimal_result[u][alpha_value].append( optimal_result_1 )
+                penality_optimal_result[u][alpha_value].append(0)
+                utilization_T[u][alpha_value].append( second_doses_sum / total_capacity )
+                #####
 
             min_negative_stocks_risk[u] = min(min_negative_stocks_risk[u], heu_result_risk[5])
             min_negative_stocks_risk_7[u] = min(min_negative_stocks_risk_7[u], heu_result_risk_7[5])
@@ -551,28 +575,33 @@ if __name__ == "__main__":
 
             # Calculate the heuristic result
             heuristic_result[u].append( heu_result[0] )
+            heuristic_result_z[u].append( heu_result[3] )
             penality_heuristic[u].append( heu_result[1] )
             utilization_T_heuristic[u].append( heu_result[2] )
 
             heuristic_risk_result[u].append( heu_result_risk[0] )
             penality_heuristic_risk[u].append( heu_result_risk[1] )
+            heuristic_risk_result_z[u].append( heu_result_risk[6] )
             heuristic_risk_negative_arrival[u].append( heu_result_risk[2] )
             heuristic_risk_count_negative[u].append( heu_result_risk[3] )
             utilization_T_heuristic_risk[u].append( heu_result_risk[4] )
 
             heuristic_risk_result_7[u].append( heu_result_risk_7[0] )
+            heuristic_risk_result_7_z[u].append( heu_result_risk_7[6] )
             penality_heuristic_risk_7[u].append( heu_result_risk_7[1] )
             heuristic_risk_negative_arrival_7[u].append( heu_result_risk_7[2] )
             heuristic_risk_count_negative_7[u].append( heu_result_risk_7[3] )
             utilization_T_heuristic_risk_7[u].append( heu_result_risk_7[4] )
 
             heuristic_risk_result_14[u].append( heu_result_risk_14[0] )
+            heuristic_risk_result_14_z[u].append( heu_result_risk_14[6] )
             penality_heuristic_risk_14[u].append( heu_result_risk_14[1] )
             heuristic_risk_negative_arrival_14[u].append( heu_result_risk_14[2] )
             heuristic_risk_count_negative_14[u].append( heu_result_risk_14[3] )
             utilization_T_heuristic_risk_14[u].append( heu_result_risk_14[4] )
 
             heuristic_risk_result_21[u].append( heu_result_risk_21[0] )
+            heuristic_risk_result_21_z[u].append( heu_result_risk_21[6] )
             penality_heuristic_risk_21[u].append( heu_result_risk_21[1] )
             heuristic_risk_negative_arrival_21[u].append( heu_result_risk_21[2] )
             heuristic_risk_count_negative_21[u].append( heu_result_risk_21[3] )
@@ -581,20 +610,9 @@ if __name__ == "__main__":
             # Write the solution to the single file (create direcitory if not exists)
             output_dir = Path("csv_solution_v2/capacity_" + u)
             output_dir.mkdir(parents=True, exist_ok=True)
-            df.to_csv(CSV_OUTPUT_FOLDER + "/capacity_" + u + "/solution_" + file_list[i] )
+            df.to_csv(CSV_OUTPUT_FOLDER + "/capacity_" + u + "/solution_" + file_list[i], sep =';' , decimal=",")
 
-    instances = np.arange(1, len(optimal_result["1 c"]) + 1 - (1000 - NUMBER_OF_ELEMENT), 1).tolist()
-
-    print(min_negative_stocks_risk)
-    print(min_negative_stocks_risk_7)
-    print(min_negative_stocks_risk_14)
-    print(min_negative_stocks_risk_21)
-
-
-    for i in robust_optimization:
-        robust_optimization[i]["sPfizer"] = feasible_s_pfizer
-        robust_optimization[i]["sModerna"] = feasible_s_moderna
-        robust_optimization[i]["sAstrazeneca"] = feasible_s_astrazeneca
+    instances = np.arange(1, len(optimal_result["1 c"][0]) + 1 - (1000 - NUMBER_OF_ELEMENT), 1).tolist()
 
     # optimize_test_capacity_multiple_vaccines_robust(180, DELTA, capacity["1 c"],robust_optimization)
 
@@ -603,12 +621,28 @@ if __name__ == "__main__":
     df_summary = pd.DataFrame(instances, columns= ['instance'])
     capacity_list = []
 
-    avg_optimal_value = []
+    avg_optimal_value = {}
+    avg_optimal_value_z = {}
+    avg_stocks_optimal = {}
+    avg_utilization_T = {}
+
+    for alpha_element in ALPHA_LIST:
+        avg_optimal_value[alpha_element] = []
+        avg_optimal_value_z[alpha_element] = []
+        avg_stocks_optimal[alpha_element] = []
+        avg_utilization_T[alpha_element] = []
+
     avg_heuristic_value = []
     avg_heuristic_risk_value = []
     avg_heuristic_risk_value_7 = []
     avg_heuristic_risk_value_14 = []
     avg_heuristic_risk_value_21 = []
+
+    avg_heuristic_value_z = []
+    avg_heuristic_risk_value_z = []
+    avg_heuristic_risk_value_7_z = []
+    avg_heuristic_risk_value_14_z = []
+    avg_heuristic_risk_value_21_z = []
 
     avg_result_difference = []
     avg_result_difference_risk = []
@@ -616,7 +650,6 @@ if __name__ == "__main__":
     avg_result_difference_risk_14 = []
     avg_result_difference_risk_21 = []
 
-    avg_stocks_optimal = []
     avg_stocks_heuristic = []
     avg_stocks_risk = []
     avg_stocks_risk_7 = []
@@ -629,7 +662,6 @@ if __name__ == "__main__":
     avg_stocks_difference_risk_14 = []
     avg_stocks_difference_risk_21 = []
 
-    avg_utilization_T = []
     avg_utilization_T_heuristic = []
     avg_utilization_T_heuristic_risk = []
     avg_utilization_T_heuristic_risk_7 = []
@@ -651,10 +683,10 @@ if __name__ == "__main__":
     total_min_negative_stocks_risk_14 = []
     total_min_negative_stocks_risk_21 = []
 
-
     for k in optimal_result:
-        df[k + " - optimal solution"] = optimal_result[k]
-        df[k + " - optimal solution remain stocks"] = penality_optimal_result[k]
+        for alpha_element in ALPHA_LIST:
+            df[k + " - optimal solution - " + str(alpha_element)] = optimal_result[k][alpha_element]
+            df[k + " - optimal solution remain stocks - " + str(alpha_element)] = penality_optimal_result[k][alpha_element]
 
         df[k + " - conservative heuristic solution"] = heuristic_result[k]
         df[k + " - conservative heuristic remain stocks"] = penality_heuristic[k]
@@ -673,21 +705,30 @@ if __name__ == "__main__":
         
         capacity_list.append(k)
 
-        avg_optimal_value.append(round( mean(optimal_result[k] ), 2))
-        avg_heuristic_value.append(round( mean(heuristic_result[k] ), 2))
-        avg_heuristic_risk_value.append(round( mean(heuristic_risk_result[k] ), 2))
-        avg_heuristic_risk_value_7.append(round( mean(heuristic_risk_result_7[k] ), 2))
-        avg_heuristic_risk_value_14.append(round( mean(heuristic_risk_result_14[k] ), 2))
-        avg_heuristic_risk_value_21.append(round( mean(heuristic_risk_result_21[k] ), 2))
+        for alpha_element in ALPHA_LIST:
+            avg_optimal_value[alpha_element].append(round( mean(optimal_result[k][alpha_element] ), 4))
+            avg_optimal_value_z[alpha_element].append(round( mean(optimal_result_z[k][alpha_element] ), 4))
+            avg_stocks_optimal[alpha_element].append(round( mean(penality_optimal_result[k][alpha_element] ), 4))
+            avg_utilization_T[alpha_element].append( round( mean(utilization_T[k][alpha_element] ), 4) )
 
-        avg_stocks_optimal.append(round( mean(penality_optimal_result[k] ), 2))
+        avg_heuristic_value.append(round( mean(heuristic_result[k] ), 4))
+        avg_heuristic_risk_value.append(round( mean(heuristic_risk_result[k] ), 4))
+        avg_heuristic_risk_value_7.append(round( mean(heuristic_risk_result_7[k] ), 4))
+        avg_heuristic_risk_value_14.append(round( mean(heuristic_risk_result_14[k] ), 4))
+        avg_heuristic_risk_value_21.append(round( mean(heuristic_risk_result_21[k] ), 4))
+
+        avg_heuristic_value_z.append(round( mean(heuristic_result_z[k] ), 2))
+        avg_heuristic_risk_value_z.append(round( mean(heuristic_risk_result_z[k] ), 2))
+        avg_heuristic_risk_value_7_z.append(round( mean(heuristic_risk_result_7_z[k] ), 2))
+        avg_heuristic_risk_value_14_z.append(round( mean(heuristic_risk_result_14_z[k] ), 2))
+        avg_heuristic_risk_value_21_z.append(round( mean(heuristic_risk_result_21_z[k] ), 2))
+
         avg_stocks_heuristic.append(round( mean(penality_heuristic[k] ), 2))
         avg_stocks_risk.append(round( mean(penality_heuristic_risk[k] ), 2))
         avg_stocks_risk_7.append(round( mean(penality_heuristic_risk_7[k] ), 2))
         avg_stocks_risk_14.append(round( mean(penality_heuristic_risk_14[k] ), 2))
         avg_stocks_risk_21.append(round( mean(penality_heuristic_risk_21[k] ), 2))
 
-        avg_utilization_T.append( round( mean(utilization_T[k] ), 5) )
         avg_utilization_T_heuristic.append( round( mean(utilization_T_heuristic[k] ), 5) )
         avg_utilization_T_heuristic_risk.append( round( mean(utilization_T_heuristic_risk[k] ), 5) )
         avg_utilization_T_heuristic_risk_7.append( round( mean(utilization_T_heuristic_risk_7[k] ), 5) )
@@ -713,15 +754,26 @@ if __name__ == "__main__":
 
     df = pd.DataFrame(capacity_list, columns= ['Capacity'])
 
-    df['LP model'] = avg_optimal_value
+    for alpha_element in ALPHA_LIST:
+        df['LP model - ' + str(alpha_element)] = avg_optimal_value[alpha_element]
+
+    for alpha_element in ALPHA_LIST:
+        df['LP model - ' + str(alpha_element) + ' - Z value'] = avg_optimal_value_z[alpha_element]
     
     df['Conservative heuristic'] = avg_heuristic_value
     df['Heuristic 1-days-ahead risk'] = avg_heuristic_risk_value
     df['Heuristic 7-days-ahead risk'] = avg_heuristic_risk_value_7
     df['Heuristic 14-days-ahead risk'] = avg_heuristic_risk_value_14
     df['Heuristic 21-days-ahead risk'] = avg_heuristic_risk_value_21
-    
-    df['LP model stocks'] = avg_stocks_optimal
+
+    df['Conservative heuristic - Z'] = avg_heuristic_value_z
+    df['Heuristic 1-days-ahead risk - Z'] = avg_heuristic_risk_value_z
+    df['Heuristic 7-days-ahead risk - Z'] = avg_heuristic_risk_value_7_z
+    df['Heuristic 14-days-ahead risk - Z'] = avg_heuristic_risk_value_14_z
+    df['Heuristic 21-days-ahead risk - Z'] = avg_heuristic_risk_value_21_z
+
+    for alpha_element in ALPHA_LIST:
+        df['LP model stocks - ' + str(alpha_element)] = avg_stocks_optimal[alpha_element]
     
     df['Conservative heuristic stocks'] = avg_stocks_heuristic
     df['Heuristic q-1 risk stocks'] = avg_stocks_risk
@@ -739,7 +791,9 @@ if __name__ == "__main__":
     df['Heuristic 14-days-ahead negative days'] = avg_heuristic_risk_count_negative_14
     df['Heuristic 21-days-ahead negative days'] = avg_heuristic_risk_count_negative_21
     
-    df['LP model utilization'] = avg_utilization_T
+    for alpha_element in ALPHA_LIST:
+        df['LP model utilization - ' + str(alpha_element)] = avg_utilization_T[alpha_element]
+
     df['Heuristic utilization'] = avg_utilization_T_heuristic
     df['Heuristic 1-days-ahead utilization'] = avg_utilization_T_heuristic_risk
     df['Heuristic 7-days-ahead utilization'] = avg_utilization_T_heuristic_risk_7
@@ -751,10 +805,7 @@ if __name__ == "__main__":
     df['Heuristic 14-days-ahead max negative stocks'] = total_min_negative_stocks_risk_14
     df['Heuristic 21-days-ahead max negative stocks'] = total_min_negative_stocks_risk_21
 
-    print(avg_optimal_value)
-
-
     if LAST_DAY_VACCINES:
-        df.to_csv("result_summary_v2_zero_stocks_123.csv", index = 0)
+        df.to_csv("result_summary_v2_zero_stocks_123.csv", index = 0, sep =';', decimal=",")
     else:
         df.to_csv("result_summary_v2.csv", index = 0)
